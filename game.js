@@ -8,11 +8,15 @@ function createDeck() {
     }
   }
 
-  // Add 8 Dog cards
+  // Add 8 Dog cards (wakes a cat)
   for (let i = 0; i < 8; i++) {
     deck.push({ type: "dog" });
   }
 
+    // Add 4 Fish cards (steals a cat)
+  for (let i = 0; i < 4; i++) {
+    deck.push({ type: "fish" });
+  }
   return deck;
 }
 
@@ -43,7 +47,7 @@ function dealHands(deck, numPlayers, handSize = 5) {
 
 function createCats() {
   const cats = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     cats.push({ type: "cat", id: i, awake: false });
   }
   return cats;
@@ -91,6 +95,52 @@ function playDog(game, playerId, cardIndex) {
 
   // Advance to the next player
    advanceTurn(game);
+
+  return game;
+}
+
+
+function playFish(game, playerId, cardIndex, targetPlayerId) {
+  if (game.winner !== undefined) {
+    console.log("Game is already over!");
+    return game;
+  }
+
+  if (playerId !== game.currentPlayerIndex) {
+    console.log("It's not your turn!");
+    return game;
+  }
+
+  const player = game.players[playerId];
+  const card = player.hand[cardIndex];
+
+  if (card.type !== "fish") {
+    console.log("That's not a Fish!");
+    return game;
+  }
+
+  const targetPlayer = game.players[targetPlayerId];
+
+  if (!targetPlayer || targetPlayer.cats.length === 0) {
+    console.log("Target player has no cats to steal!");
+    return game;
+  }
+
+  player.hand.splice(cardIndex, 1);
+  game.discardPile.push(card);
+  drawCard(game, player);
+
+  const stolenCat = targetPlayer.cats.shift();
+  player.cats.push(stolenCat);
+
+  const winnerId = checkWinner(game);
+  if (winnerId !== null) {
+    game.winner = winnerId;
+    console.log(`Player ${winnerId} wins!`);
+    return game;
+  }
+
+  advanceTurn(game);
 
   return game;
 }
@@ -183,3 +233,25 @@ function testWinCondition() {
 testWinCondition();
 
 
+function testFish() {
+  const game = createGame(2);
+
+  // Force player 0 to have a Fish card at index 0
+  game.players[0].hand[0] = { type: "fish" };
+
+  // Force player 1 to already have a cat to steal
+  const cat = game.sleepingCats.shift();
+  cat.awake = true;
+  game.players[1].cats.push(cat);
+
+  console.log("Before steal — player 0 cats:", game.players[0].cats.length);
+  console.log("Before steal — player 1 cats:", game.players[1].cats.length);
+
+  playFish(game, 0, 0, 1); // player 0 plays fish at index 0, targeting player 1
+
+  console.log("After steal — player 0 cats:", game.players[0].cats.length);
+  console.log("After steal — player 1 cats:", game.players[1].cats.length);
+  console.log("Current player (should be 1):", game.currentPlayerIndex);
+}
+
+testFish();
