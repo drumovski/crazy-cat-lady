@@ -28,6 +28,7 @@ export default function App() {
   // Local hotseat state
   const [game, setGame] = useState(null);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
+  const [playerNames, setPlayerNames] = useState([]);
 
   // Online state
   const [onlineSession, setOnlineSession] = useState(null); // { roomCode, playerId }
@@ -97,6 +98,7 @@ export default function App() {
     setScreen("menu");
     setGame(null);
     setAiPlayerIds([]);
+    setPlayerNames([]);
     setOnlineSession(null);
     setRoomState(null);
   }
@@ -109,8 +111,9 @@ export default function App() {
     if (!game) {
       return (
         <SetupScreen
-          onStart={(numPlayers, aiIds) => {
+          onStart={(numPlayers, aiIds, names) => {
             setAiPlayerIds(aiIds);
+            setPlayerNames(names);
             setGame(createGame(numPlayers));
           }}
         />
@@ -121,6 +124,7 @@ export default function App() {
       <GameBoard
         game={game}
         aiPlayerIds={aiPlayerIds}
+        playerNames={playerNames}
         onNewGame={backToMenu}
         onPlayDog={(playerId, cardIndex, slotIndex) => applyAction(playDog, playerId, cardIndex, slotIndex)}
         onPlayFish={(playerId, cardIndex, targetPlayerId, targetCatIndex) =>
@@ -152,6 +156,7 @@ export default function App() {
     <GameBoard
       game={roomState.game}
       aiPlayerIds={roomState.aiPlayerIds}
+      playerNames={roomState.playerNames}
       myPlayerId={myPlayerId}
       onNewGame={backToMenu}
       onPlayDog={(_playerId, cardIndex, slotIndex) => dispatch("playDog", [cardIndex, slotIndex])}

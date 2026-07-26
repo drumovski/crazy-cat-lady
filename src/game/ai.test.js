@@ -1,5 +1,5 @@
 import { createGame } from "./engine.js";
-import { chooseAiTurn, takeAiTurn } from "./ai.js";
+import { chooseAiTurn, takeAiTurn, AI_NAMES, pickRandomAiName } from "./ai.js";
 
 function testAiPlaysDogWhenAvailable() {
   const game = createGame(2);
@@ -102,3 +102,18 @@ function testTakeAiTurnAppliesTheChosenAction() {
 }
 
 testTakeAiTurnAppliesTheChosenAction();
+
+function testPickRandomAiNameAvoidsUsedNames() {
+  const usedNames = AI_NAMES.slice(0, AI_NAMES.length - 1); // all but one taken
+  const picked = pickRandomAiName(usedNames);
+  console.log("Picks the one remaining unused name:", picked === AI_NAMES[AI_NAMES.length - 1]);
+}
+
+testPickRandomAiNameAvoidsUsedNames();
+
+function testPickRandomAiNameFallsBackWhenAllUsed() {
+  const picked = pickRandomAiName(AI_NAMES);
+  console.log("Falls back to the full list when all names are taken:", AI_NAMES.includes(picked));
+}
+
+testPickRandomAiNameFallsBackWhenAllUsed();

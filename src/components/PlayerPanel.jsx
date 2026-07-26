@@ -2,6 +2,7 @@ import Card from "./Card.jsx";
 
 export default function PlayerPanel({
   player,
+  name,
   isAi,
   isActive,
   isCurrentTurn,
@@ -22,7 +23,7 @@ export default function PlayerPanel({
       tabIndex={panelSelectable ? 0 : undefined}
     >
       <h3>
-        Player {player.id + 1}
+        {name || `Player ${player.id + 1}`}
         {isAi ? " 🤖" : ""}
         {isCurrentTurn ? " (current turn)" : ""}
       </h3>

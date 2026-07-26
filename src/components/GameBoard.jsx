@@ -11,9 +11,47 @@ import { isValidMathDiscard } from "../game/engine.js";
 //   'catnip-cat'   -> next: click one of that opponent's cats to put to sleep
 const EMPTY_SELECTION = {};
 
+const CARD_TYPE_LABELS = {
+  dog: "Dog",
+  fish: "Fish",
+  seagull: "Seagull",
+  catnip: "Catnip",
+  snail: "Snail",
+  laser: "Laser Pointer"
+};
+
+// game.lastMessage is data ({ kind, ...fields }), not pre-formatted text, so
+// it can be rendered using display names instead of a hardcoded "Player N".
+function formatLastMessage(message, getName) {
+  switch (message.kind) {
+    case "fishStolen":
+      return `${getName(message.attackerId)} stole your ${message.catName} with a Fish!`;
+    case "catnipped":
+      return `${getName(message.attackerId)} put your ${message.catName} back to sleep with Catnip!`;
+    case "blocked": {
+      const counterLabel = message.counterType.charAt(0).toUpperCase() + message.counterType.slice(1);
+      const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
+      return `${getName(message.blockerId)} blocked your ${cardLabel} with a ${counterLabel}!`;
+    }
+    case "fishStolenConfirm":
+      return `You stole ${getName(message.targetId)}'s ${message.catName} with your Fish!`;
+    case "catnippedConfirm":
+      return `You put ${getName(message.targetId)}'s ${message.catName} back to sleep with your Catnip!`;
+    case "laserNoCards":
+      return "No cards left to reveal.";
+    case "laserNoSlots":
+      return "Revealed a number card, but no sleeping cats are left to wake.";
+    case "laserReveal":
+      return `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`;
+    default:
+      return "";
+  }
+}
+
 export default function GameBoard({
   game,
   aiPlayerIds = [],
+  playerNames = [],
   myPlayerId, // undefined in local hotseat mode; a specific seat in online mode
   onNewGame,
   onPlayDog,
@@ -28,8 +66,10 @@ export default function GameBoard({
   const [selection, setSelection] = useState(EMPTY_SELECTION);
   const [discardSelection, setDiscardSelection] = useState([]);
 
+  const getName = id => playerNames[id] || `Player ${id + 1}`;
+
   if (game.winner !== undefined) {
-    return <WinScreen game={game} onNewGame={onNewGame} />;
+    return <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />;
   }
 
   const activePlayerId = game.pendingAction
@@ -168,8 +208,8 @@ export default function GameBoard({
       {!canInteract && !game.pendingAction && !game.pendingWakeChoice && (
         <div className="banner">
           {isAiDecision
-            ? `🤖 Player ${activePlayerId + 1} (AI) is thinking…`
-            : `Waiting for Player ${activePlayerId + 1}…`}
+            ? `🤖 ${getName(activePlayerId)} is thinking…`
+            : `Waiting for ${getName(activePlayerId)}…`}
         </div>
       )}
 
@@ -181,8 +221,8 @@ export default function GameBoard({
         const verb = action.type === "fish" ? "steal" : "put to sleep";
         return (
           <div className="banner">
-            Player {action.attackerId + 1} played {cardLabel} to {verb} Player {action.targetId + 1}'s{" "}
-            {cat.name}! Player {action.targetId + 1} may block with a {counterType}, or let it happen.
+            {getName(action.attackerId)} played {cardLabel} to {verb} {getName(action.targetId)}'s{" "}
+            {cat.name}! {getName(action.targetId)} may block with a {counterType}, or let it happen.
             {canInteract && (
               <button
                 type="button"
@@ -199,10 +239,10 @@ export default function GameBoard({
       {game.pendingWakeChoice && (
         <div className="banner">
           {game.pendingWakeChoice.actorId === game.pendingWakeChoice.playerId
-            ? `Player ${game.pendingWakeChoice.playerId + 1} gets to wake a bonus sleeping cat!`
-            : `Player ${game.pendingWakeChoice.actorId + 1} played Laser Pointer — the count landed on Player ${
-                game.pendingWakeChoice.playerId + 1
-              }, who may wake a sleeping cat!`}
+            ? `${getName(game.pendingWakeChoice.playerId)} gets to wake a bonus sleeping cat!`
+            : `${getName(game.pendingWakeChoice.actorId)} played Laser Pointer — the count landed on ${getName(
+                game.pendingWakeChoice.playerId
+              )}, who may wake a sleeping cat!`}
         </div>
       )}
 
@@ -226,7 +266,7 @@ export default function GameBoard({
         !game.pendingWakeChoice &&
         game.lastMessage &&
         (myPlayerId === undefined || myPlayerId === game.lastMessage.playerId) && (
-          <div className="banner">{game.lastMessage.text}</div>
+          <div className="banner">{formatLastMessage(game.lastMessage, getName)}</div>
         )}
 
       <div className="players-row">
@@ -243,6 +283,7 @@ export default function GameBoard({
             <PlayerPanel
               key={player.id}
               player={player}
+              name={getName(player.id)}
               isAi={aiPlayerIds.includes(player.id)}
               isActive={isRevealed}
               isCurrentTurn={player.id === game.currentPlayerIndex}
@@ -303,7 +344,8 @@ export default function GameBoard({
   );
 }
 
-function WinScreen({ game, onNewGame }) {
+function WinScreen({ game, playerNames = [], onNewGame }) {
+  const getName = id => playerNames[id] || `Player ${id + 1}`;
   const ranked = [...game.players].sort((a, b) => {
     const pointsA = a.cats.reduce((sum, cat) => sum + cat.points, 0);
     const pointsB = b.cats.reduce((sum, cat) => sum + cat.points, 0);
@@ -312,7 +354,7 @@ function WinScreen({ game, onNewGame }) {
 
   return (
     <div className="win-screen">
-      <h1>🎉 Player {game.winner + 1} wins!</h1>
+      <h1>🎉 {getName(game.winner)} wins!</h1>
       <table className="win-table">
         <thead>
           <tr>
@@ -324,7 +366,7 @@ function WinScreen({ game, onNewGame }) {
         <tbody>
           {ranked.map(player => (
             <tr key={player.id} className={player.id === game.winner ? "win-row-winner" : ""}>
-              <td>Player {player.id + 1}</td>
+              <td>{getName(player.id)}</td>
               <td>{player.cats.length}</td>
               <td>{player.cats.reduce((sum, cat) => sum + cat.points, 0)}</td>
             </tr>

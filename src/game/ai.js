@@ -9,6 +9,32 @@ import {
   discardMathSet
 } from "./engine.js";
 
+export const AI_NAMES = [
+  "HAL 9000",
+  "R2-D2",
+  "C-3PO",
+  "WALL-E",
+  "Skynet",
+  "Agent Smith",
+  "Ultron",
+  "Baymax",
+  "Ava",
+  "Bishop",
+  "Roy Batty",
+  "TARS",
+  "CASE",
+  "T-800"
+];
+
+// Picks a random name for an AI player, avoiding any already in use (e.g. so
+// a 3-AI game doesn't end up with two players both named "TARS") — falls
+// back to the full list if every name is somehow already taken.
+export function pickRandomAiName(usedNames = []) {
+  const available = AI_NAMES.filter(name => !usedNames.includes(name));
+  const pool = available.length > 0 ? available : AI_NAMES;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function pickRichestOpponent(opponents) {
   return opponents.reduce((richest, player) =>
     getPlayerPoints(player) > getPlayerPoints(richest) ? player : richest

@@ -15,14 +15,15 @@ function broadcastRoom(room) {
     status: room.status,
     numPlayers: room.numPlayers,
     aiPlayerIds: room.aiPlayerIds,
+    playerNames: room.playerNames,
     joinedSeats: [...room.seatToSocket.keys()],
     game: room.game
   });
 }
 
 io.on("connection", socket => {
-  socket.on("createRoom", ({ numPlayers, numAiOpponents }, callback) => {
-    const { room, playerId, error } = createRoom({ numPlayers, numAiOpponents, socketId: socket.id });
+  socket.on("createRoom", ({ numPlayers, numAiOpponents, name }, callback) => {
+    const { room, playerId, error } = createRoom({ numPlayers, numAiOpponents, socketId: socket.id, name });
     if (error) {
       callback({ error });
       return;
@@ -34,8 +35,8 @@ io.on("connection", socket => {
     scheduleAiIfNeeded(room, () => broadcastRoom(room));
   });
 
-  socket.on("joinRoom", ({ roomCode }, callback) => {
-    const result = joinRoom(roomCode, socket.id);
+  socket.on("joinRoom", ({ roomCode, name }, callback) => {
+    const result = joinRoom(roomCode, socket.id, name);
     if (result.error) {
       callback({ error: result.error });
       return;

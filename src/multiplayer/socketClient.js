@@ -14,15 +14,15 @@ function getSocket() {
   return socket;
 }
 
-export function createRoom(numPlayers, numAiOpponents) {
+export function createRoom(numPlayers, numAiOpponents, name) {
   return new Promise(resolve => {
-    getSocket().emit("createRoom", { numPlayers, numAiOpponents }, resolve);
+    getSocket().emit("createRoom", { numPlayers, numAiOpponents, name }, resolve);
   });
 }
 
-export function joinRoom(roomCode) {
+export function joinRoom(roomCode, name) {
   return new Promise(resolve => {
-    getSocket().emit("joinRoom", { roomCode }, resolve);
+    getSocket().emit("joinRoom", { roomCode, name }, resolve);
   });
 }
 

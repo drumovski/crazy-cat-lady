@@ -5,6 +5,7 @@ export default function OnlineSetup({ onReady, onBack }) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
   const [numAiOpponents, setNumAiOpponents] = useState(0);
+  const [playerName, setPlayerName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState(null);
   const [room, setRoom] = useState(null); // { roomCode, playerId } once created/joined
@@ -27,7 +28,7 @@ export default function OnlineSetup({ onReady, onBack }) {
 
   async function handleCreate() {
     setError(null);
-    const result = await createRoom(numPlayers, numAiOpponents);
+    const result = await createRoom(numPlayers, numAiOpponents, playerName);
     if (result.error) {
       setError(result.error);
       return;
@@ -37,7 +38,7 @@ export default function OnlineSetup({ onReady, onBack }) {
 
   async function handleJoin() {
     setError(null);
-    const result = await joinRoom(joinCode.trim().toUpperCase());
+    const result = await joinRoom(joinCode.trim().toUpperCase(), playerName);
     if (result.error) {
       setError(result.error);
       return;
@@ -63,6 +64,16 @@ export default function OnlineSetup({ onReady, onBack }) {
     return (
       <div className="setup-screen">
         <h1>🐱 Crazy Cat Lady</h1>
+        <label className="setup-field">
+          Your name
+          <input
+            className="name-input"
+            value={playerName}
+            maxLength={20}
+            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Player 1"
+          />
+        </label>
         <label className="setup-field">
           Total players
           <select value={numPlayers} onChange={e => {
@@ -98,6 +109,16 @@ export default function OnlineSetup({ onReady, onBack }) {
     return (
       <div className="setup-screen">
         <h1>🐱 Crazy Cat Lady</h1>
+        <label className="setup-field">
+          Your name
+          <input
+            className="name-input"
+            value={playerName}
+            maxLength={20}
+            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Player 2"
+          />
+        </label>
         <label className="setup-field">
           Room code
           <input

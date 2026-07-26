@@ -11,7 +11,7 @@ import {
   respondAsAi,
   respondToWakeChoiceAsAi
 } from "../src/game/engine.js";
-import { takeAiTurn } from "../src/game/ai.js";
+import { takeAiTurn, pickRandomAiName } from "../src/game/ai.js";
 
 const AI_THINK_DELAY_MS = 700;
 
@@ -45,7 +45,12 @@ const ACTIONS = {
   respondToWakeChoice: (game, playerId, [slotIndex]) => respondToWakeChoice(game, playerId, slotIndex)
 };
 
-function assignSeat(room, socketId) {
+function sanitizeName(name, fallback) {
+  const trimmed = typeof name === "string" ? name.trim().slice(0, 20) : "";
+  return trimmed || fallback;
+}
+
+function assignSeat(room, socketId, name) {
   const freeSeat = room.humanSeats.find(seatId => !room.seatToSocket.has(seatId));
   if (freeSeat === undefined) {
     return { error: "Room is full" };
@@ -53,6 +58,7 @@ function assignSeat(room, socketId) {
 
   room.seatToSocket.set(freeSeat, socketId);
   room.socketToSeat.set(socketId, freeSeat);
+  room.playerNames[freeSeat] = sanitizeName(name, `Player ${freeSeat + 1}`);
 
   if (room.humanSeats.every(seatId => room.seatToSocket.has(seatId))) {
     room.game = createGame(room.numPlayers);
@@ -64,7 +70,7 @@ function assignSeat(room, socketId) {
 
 // numAiOpponents seats are always the LAST numAiOpponents seats (e.g. 4
 // players / 2 AI -> seats 2,3 are AI). The creator always gets seat 0.
-export function createRoom({ numPlayers, numAiOpponents, socketId }) {
+export function createRoom({ numPlayers, numAiOpponents, socketId, name }) {
   if (numAiOpponents >= numPlayers) {
     return { error: "Need at least one human seat" };
   }
@@ -85,17 +91,25 @@ export function createRoom({ numPlayers, numAiOpponents, socketId }) {
     humanSeats,
     seatToSocket: new Map(),
     socketToSeat: new Map(),
+    playerNames: new Array(numPlayers).fill(null),
     game: null,
     status: "waiting"
   };
 
+  const usedAiNames = [];
+  for (const aiSeat of aiPlayerIds) {
+    const aiName = pickRandomAiName(usedAiNames);
+    usedAiNames.push(aiName);
+    room.playerNames[aiSeat] = aiName;
+  }
+
   rooms.set(room.roomCode, room);
 
-  const seatResult = assignSeat(room, socketId);
+  const seatResult = assignSeat(room, socketId, name);
   return { room, playerId: seatResult.playerId };
 }
 
-export function joinRoom(roomCode, socketId) {
+export function joinRoom(roomCode, socketId, name) {
   const room = rooms.get(roomCode);
   if (!room) {
     return { error: "Room not found" };
@@ -104,7 +118,7 @@ export function joinRoom(roomCode, socketId) {
     return { error: "That game has already started" };
   }
 
-  const seatResult = assignSeat(room, socketId);
+  const seatResult = assignSeat(room, socketId, name);
   if (seatResult.error) {
     return { error: seatResult.error };
   }

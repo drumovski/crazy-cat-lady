@@ -242,10 +242,7 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
 
   const stolenCatName = targetPlayer.cats[targetCatIndex].name;
   resolveFishSteal(game, playerId, targetPlayerId, targetCatIndex);
-  finishTurn(game, {
-    playerId: targetPlayerId,
-    text: `Player ${playerId + 1} stole your ${stolenCatName} with a Fish!`
-  });
+  finishTurn(game, { playerId: targetPlayerId, kind: "fishStolen", attackerId: playerId, catName: stolenCatName });
 
   return game;
 }
@@ -293,10 +290,7 @@ export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatI
 
   const sleepyCatName = targetPlayer.cats[targetCatIndex].name;
   resolveCatnip(game, targetPlayerId, targetCatIndex);
-  finishTurn(game, {
-    playerId: targetPlayerId,
-    text: `Player ${playerId + 1} put your ${sleepyCatName} back to sleep with Catnip!`
-  });
+  finishTurn(game, { playerId: targetPlayerId, kind: "catnipped", attackerId: playerId, catName: sleepyCatName });
 
   return game;
 }
@@ -319,7 +313,6 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
   const counterType = action.type === "fish" ? "seagull" : "snail";
   const targetPlayer = game.players[targetPlayerId];
-  const cardLabel = action.type === "fish" ? "Fish" : "Catnip";
   const catName = targetPlayer.cats[action.catIndex].name;
 
   if (blockCardIndex !== null && blockCardIndex !== undefined) {
@@ -337,7 +330,10 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
     finishTurn(game, {
       playerId: action.attackerId,
-      text: `Player ${targetPlayerId + 1} blocked your ${cardLabel} with a ${counterType[0].toUpperCase()}${counterType.slice(1)}!`
+      kind: "blocked",
+      blockerId: targetPlayerId,
+      cardType: action.type,
+      counterType
     });
 
     return game;
@@ -345,16 +341,10 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
   if (action.type === "fish") {
     resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
-    finishTurn(game, {
-      playerId: action.attackerId,
-      text: `You stole Player ${targetPlayerId + 1}'s ${catName} with your Fish!`
-    });
+    finishTurn(game, { playerId: action.attackerId, kind: "fishStolenConfirm", targetId: targetPlayerId, catName });
   } else {
     resolveCatnip(game, action.targetId, action.catIndex);
-    finishTurn(game, {
-      playerId: action.attackerId,
-      text: `You put Player ${targetPlayerId + 1}'s ${catName} back to sleep with your Catnip!`
-    });
+    finishTurn(game, { playerId: action.attackerId, kind: "catnippedConfirm", targetId: targetPlayerId, catName });
   }
 
   return game;
@@ -445,22 +435,15 @@ export function resolveCatnip(game, targetId, targetCatIndex) {
   putCatBackToSleep(game, cat);
 }
 
-const CARD_TYPE_LABELS = {
-  dog: "Dog",
-  fish: "Fish",
-  seagull: "Seagull",
-  catnip: "Catnip",
-  snail: "Snail",
-  laser: "Laser Pointer"
-};
-
 // Shared end-of-turn bookkeeping: clear any pending state, check for a
 // winner, and advance the turn if the game isn't over. `lastMessage` is a
 // short player-facing description of what just happened to a specific
 // player's hand (e.g. for actions with no other visible effect), tagged with
-// whose it is ({ playerId, text }) so the UI can show it only to them rather
-// than to whoever's turn it is by the time it renders — it's cleared by
-// default so stale messages don't linger past the next action.
+// whose it is ({ playerId, kind, ...data }) so the UI can show it only to
+// them rather than to whoever's turn it is by the time it renders. It's data
+// rather than pre-formatted text — `kind` + the rest of the fields — so the
+// UI can render other players by name instead of a hardcoded "Player N"; it's
+// cleared by default so stale messages don't linger past the next action.
 export function finishTurn(game, lastMessage = null) {
   game.pendingAction = null;
   game.pendingWakeChoice = null;
@@ -501,7 +484,7 @@ export function playLaserPointer(game, playerId, cardIndex) {
   if (revealedCard === undefined) {
     // Nothing left to reveal — just draw back up if possible.
     drawCard(game, player);
-    finishTurn(game, { playerId, text: "No cards left to reveal." });
+    finishTurn(game, { playerId, kind: "laserNoCards" });
     return game;
   } else if (revealedCard.type === "number") {
     game.discardPile.push(revealedCard);
@@ -518,17 +501,14 @@ export function playLaserPointer(game, playerId, cardIndex) {
       return game; // wait for respondToWakeChoice — turn does not advance yet
     }
 
-    finishTurn(game, { playerId, text: "Revealed a number card, but no sleeping cats are left to wake." });
+    finishTurn(game, { playerId, kind: "laserNoSlots" });
     return game;
   }
 
   // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
   // as their replacement draw.
   player.hand.push(revealedCard);
-  finishTurn(game, {
-    playerId,
-    text: `Laser Pointer revealed a ${CARD_TYPE_LABELS[revealedCard.type]} — added to your hand.`
-  });
+  finishTurn(game, { playerId, kind: "laserReveal", cardType: revealedCard.type });
 
   return game;
 }

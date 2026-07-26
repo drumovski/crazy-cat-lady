@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { pickRandomAiName } from "../game/ai.js";
 
 export default function SetupScreen({ onStart }) {
   const [numPlayers, setNumPlayers] = useState(2);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
+  const [playerNames, setPlayerNames] = useState(["", "", "", "", ""]);
 
   function changeNumPlayers(n) {
     setNumPlayers(n);
@@ -13,6 +15,27 @@ export default function SetupScreen({ onStart }) {
     setAiPlayerIds(prev =>
       prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
     );
+  }
+
+  function setName(playerId, value) {
+    setPlayerNames(prev => {
+      const next = [...prev];
+      next[playerId] = value;
+      return next;
+    });
+  }
+
+  function handleStart() {
+    const usedAiNames = [];
+    const finalNames = Array.from({ length: numPlayers }, (_, playerId) => {
+      if (aiPlayerIds.includes(playerId)) {
+        const name = pickRandomAiName(usedAiNames);
+        usedAiNames.push(name);
+        return name;
+      }
+      return playerNames[playerId].trim() || `Player ${playerId + 1}`;
+    });
+    onStart(numPlayers, aiPlayerIds, finalNames);
   }
 
   return (
@@ -29,20 +52,30 @@ export default function SetupScreen({ onStart }) {
         </select>
       </label>
 
-      <div className="setup-ai-list">
-        {Array.from({ length: numPlayers }, (_, playerId) => (
-          <label key={playerId} className="setup-ai-toggle">
-            <input
-              type="checkbox"
-              checked={aiPlayerIds.includes(playerId)}
-              onChange={() => toggleAi(playerId)}
-            />
-            Player {playerId + 1} is AI-controlled
-          </label>
-        ))}
+      <div className="setup-player-list">
+        {Array.from({ length: numPlayers }, (_, playerId) => {
+          const isAi = aiPlayerIds.includes(playerId);
+          return (
+            <div key={playerId} className="setup-player-row">
+              <input
+                className="setup-name-input"
+                type="text"
+                maxLength={20}
+                placeholder={`Player ${playerId + 1}`}
+                value={isAi ? "" : playerNames[playerId]}
+                disabled={isAi}
+                onChange={e => setName(playerId, e.target.value)}
+              />
+              <label className="setup-ai-toggle">
+                <input type="checkbox" checked={isAi} onChange={() => toggleAi(playerId)} />
+                AI-controlled
+              </label>
+            </div>
+          );
+        })}
       </div>
 
-      <button type="button" className="primary-button" onClick={() => onStart(numPlayers, aiPlayerIds)}>
+      <button type="button" className="primary-button" onClick={handleStart}>
         Start Game
       </button>
 

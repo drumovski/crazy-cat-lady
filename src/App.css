@@ -74,16 +74,35 @@ button {
   font-size: 14px;
 }
 
-.setup-ai-list {
+.setup-player-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   font-size: 14px;
+}
+.setup-player-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.setup-name-input {
+  font: inherit;
+  font-size: 14px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  width: 140px;
+}
+.setup-name-input:disabled {
+  opacity: 0.5;
 }
 .setup-ai-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .room-code {
@@ -109,6 +128,17 @@ button {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text-h);
+}
+
+.name-input {
+  font: inherit;
+  font-size: 16px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  width: 180px;
 }
 
 .setup-error {
