@@ -21,28 +21,42 @@ const CARD_TYPE_LABELS = {
 };
 
 // game.lastMessage is data ({ kind, ...fields }), not pre-formatted text, so
-// it can be rendered using display names instead of a hardcoded "Player N".
-function formatLastMessage(message, getName) {
+// it can be rendered using display names instead of a hardcoded "Player N" —
+// and, critically, so the pronoun can flip based on who's actually looking.
+// In online mode this only ever renders for the one client it's about, so
+// "your"/"you" is always correct there. In local hotseat mode there's no
+// single "you" — the banner is visible to the whole shared screen regardless
+// of whose turn it is now — so isSelf is always false there and every
+// message names the affected player instead of assuming it's the viewer.
+function formatLastMessage(message, getName, isSelf) {
+  const who = isSelf ? "You" : getName(message.playerId);
+  const subjectPossessive = isSelf ? "your" : `${getName(message.playerId)}'s`;
+  const ownPossessive = isSelf ? "your" : "their";
+
   switch (message.kind) {
     case "fishStolen":
-      return `${getName(message.attackerId)} stole your ${message.catName} with a Fish!`;
+      return `${getName(message.attackerId)} stole ${subjectPossessive} ${message.catName} with a Fish!`;
     case "catnipped":
-      return `${getName(message.attackerId)} put your ${message.catName} back to sleep with Catnip!`;
+      return `${getName(message.attackerId)} put ${subjectPossessive} ${message.catName} back to sleep with Catnip!`;
     case "blocked": {
       const counterLabel = message.counterType.charAt(0).toUpperCase() + message.counterType.slice(1);
       const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
-      return `${getName(message.blockerId)} blocked your ${cardLabel} with a ${counterLabel}!`;
+      return `${getName(message.blockerId)} blocked ${subjectPossessive} ${cardLabel} with a ${counterLabel}!`;
     }
     case "fishStolenConfirm":
-      return `You stole ${getName(message.targetId)}'s ${message.catName} with your Fish!`;
+      return `${who} stole ${getName(message.targetId)}'s ${message.catName} with ${ownPossessive} Fish!`;
     case "catnippedConfirm":
-      return `You put ${getName(message.targetId)}'s ${message.catName} back to sleep with your Catnip!`;
+      return `${who} put ${getName(message.targetId)}'s ${message.catName} back to sleep with ${ownPossessive} Catnip!`;
     case "laserNoCards":
-      return "No cards left to reveal.";
+      return isSelf ? "No cards left to reveal." : `${who} had no cards left to reveal.`;
     case "laserNoSlots":
-      return "Revealed a number card, but no sleeping cats are left to wake.";
+      return isSelf
+        ? "Revealed a number card, but no sleeping cats are left to wake."
+        : `${who} revealed a number card, but no sleeping cats were left to wake.`;
     case "laserReveal":
-      return `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`;
+      return isSelf
+        ? `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`
+        : `${who}'s Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to ${ownPossessive} hand.`;
     default:
       return "";
   }
@@ -266,7 +280,9 @@ export default function GameBoard({
         !game.pendingWakeChoice &&
         game.lastMessage &&
         (myPlayerId === undefined || myPlayerId === game.lastMessage.playerId) && (
-          <div className="banner">{formatLastMessage(game.lastMessage, getName)}</div>
+          <div className="banner">
+            {formatLastMessage(game.lastMessage, getName, myPlayerId === game.lastMessage.playerId)}
+          </div>
         )}
 
       <div className="players-row">
