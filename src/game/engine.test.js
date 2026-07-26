@@ -1,25 +1,19 @@
-// In Node this pulls the functions from game.js's CommonJS export. In the
-// browser (test.html), require doesn't exist — game.js's <script> tag has
-// already defined these as plain globals, so the destructure is skipped and
-// the bare identifiers below resolve to those globals directly.
-if (typeof require !== "undefined") {
-  var {
-    createGame,
-    playDog,
-    playFish,
-    playCatnip,
-    respondToPendingAction,
-    respondAsAi,
-    respondToWakeChoice,
-    wakeCatAtSlot,
-    giveCatToPlayer,
-    drawCard,
-    discardCard,
-    discardMathSet,
-    playLaserPointer,
-    checkWinner
-  } = require("./game.js");
-}
+import {
+  createGame,
+  playDog,
+  playFish,
+  playCatnip,
+  respondToPendingAction,
+  respondAsAi,
+  respondToWakeChoice,
+  wakeCatAtSlot,
+  giveCatToPlayer,
+  drawCard,
+  discardCard,
+  discardMathSet,
+  playLaserPointer,
+  checkWinner
+} from "./engine.js";
 
 // Test-only helper: wakes and hands a specific player any one sleeping cat,
 // bypassing turn/card rules, so tests can set up state directly.

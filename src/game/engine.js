@@ -1,4 +1,4 @@
-function createDeck() {
+export function createDeck() {
   const deck = [];
 
   // Add number cards 1-10, four of each
@@ -41,7 +41,7 @@ function createDeck() {
   return deck;
 }
 
-function shuffleDeck(deck) {
+export function shuffleDeck(deck) {
   // Work on a copy so we don't accidentally mess with the original
   const shuffled = [...deck];
 
@@ -54,7 +54,7 @@ function shuffleDeck(deck) {
   return shuffled;
 }
 
-function dealHands(deck, numPlayers, handSize = 5) {
+export function dealHands(deck, numPlayers, handSize = 5) {
   const hands = [];
   let remainingDeck = [...deck]; // copy, so we don't mutate the original
 
@@ -70,7 +70,7 @@ function dealHands(deck, numPlayers, handSize = 5) {
 // collection at once (see giveCatToPlayer) — the two Ginger Toms.
 // wakesBonus: waking this cat lets the same player immediately pick one more
 // sleeping cat slot to wake (the Sphynx).
-function createCats() {
+export function createCats() {
   const roster = [
     { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
     { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
@@ -93,21 +93,21 @@ function createCats() {
 // grid — sleepingCats[slot] holds the cat asleep there, or null once it's
 // been woken. Slots never move, and a cat always returns to its own slot
 // (see putCatBackToSleep), so a player can remember and re-target a spot.
-function createSleepingCats() {
+export function createSleepingCats() {
   return shuffleDeck(createCats()).map((cat, slot) => ({ ...cat, slot, awake: false }));
 }
 
-function getPlayerPoints(player) {
+export function getPlayerPoints(player) {
   return player.cats.reduce((sum, cat) => sum + cat.points, 0);
 }
 
-function getAvailableSlots(game) {
+export function getAvailableSlots(game) {
   return game.sleepingCats
     .map((cat, slot) => (cat !== null ? slot : null))
     .filter(slot => slot !== null);
 }
 
-function wakeCatAtSlot(game, slotIndex) {
+export function wakeCatAtSlot(game, slotIndex) {
   const cat = game.sleepingCats[slotIndex];
   cat.awake = true;
   game.sleepingCats[slotIndex] = null;
@@ -115,7 +115,7 @@ function wakeCatAtSlot(game, slotIndex) {
 }
 
 // Restores a cat to its own home slot — always the same spot it started in.
-function putCatBackToSleep(game, cat) {
+export function putCatBackToSleep(game, cat) {
   cat.awake = false;
   game.sleepingCats[cat.slot] = cat;
 }
@@ -124,7 +124,7 @@ function putCatBackToSleep(game, cat) {
 // already hold (same pairKey — e.g. the two Ginger Toms), in which case the
 // new cat goes back to sleep in its own slot instead. Returns true if the cat
 // joined the player's collection.
-function giveCatToPlayer(game, player, cat) {
+export function giveCatToPlayer(game, player, cat) {
   const conflicts = cat.pairKey && player.cats.some(c => c.pairKey === cat.pairKey);
 
   if (conflicts) {
@@ -140,7 +140,7 @@ function giveCatToPlayer(game, player, cat) {
 // Shared precondition for any turn-taking action: the game must not be over,
 // it must be this player's turn, and no reaction (block/wake choice) can be
 // outstanding. Logs why and returns false if any check fails.
-function validateTurn(game, playerId) {
+export function validateTurn(game, playerId) {
   if (game.winner !== undefined) {
     console.log("Game is already over!");
     return false;
@@ -159,7 +159,7 @@ function validateTurn(game, playerId) {
   return true;
 }
 
-function playDog(game, playerId, cardIndex, slotIndex) {
+export function playDog(game, playerId, cardIndex, slotIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -199,7 +199,7 @@ function playDog(game, playerId, cardIndex, slotIndex) {
 }
 
 
-function playFish(game, playerId, cardIndex, targetPlayerId) {
+export function playFish(game, playerId, cardIndex, targetPlayerId) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -241,7 +241,7 @@ function playFish(game, playerId, cardIndex, targetPlayerId) {
   return game;
 }
 
-function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
+export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -291,7 +291,7 @@ function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
 // Called by the target player after a Fish or Catnip is played against them.
 // Pass a hand index for blockCardIndex to block with the matching Seagull/Snail,
 // or null to let the action resolve.
-function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
+export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
   if (!game.pendingAction) {
     console.log("There's nothing to respond to!");
     return game;
@@ -332,7 +332,7 @@ function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
 // Returns the hand index of the counter card (Seagull/Snail) the target could
 // block the current pendingAction with, or null if they don't have one.
-function getBlockCardIndex(game, targetPlayerId) {
+export function getBlockCardIndex(game, targetPlayerId) {
   if (!game.pendingAction || game.pendingAction.targetId !== targetPlayerId) {
     return null;
   }
@@ -348,7 +348,7 @@ function getBlockCardIndex(game, targetPlayerId) {
 // (Human players go through respondToPendingAction directly — the UI/server
 // layer is responsible for enforcing a response time limit and defaulting to
 // blockCardIndex = null, i.e. no block, once it expires.)
-function respondAsAi(game, targetPlayerId) {
+export function respondAsAi(game, targetPlayerId) {
   const blockCardIndex = getBlockCardIndex(game, targetPlayerId);
   return respondToPendingAction(game, targetPlayerId, blockCardIndex);
 }
@@ -356,7 +356,7 @@ function respondAsAi(game, targetPlayerId) {
 // Called by whichever player currently owes a wake pick — either the Jester's
 // (Laser Pointer's) counted-to target, or a player who just woke the Sphynx
 // and gets a bonus wake. slotIndex is the sleeping cat slot they choose.
-function respondToWakeChoice(game, playerId, slotIndex) {
+export function respondToWakeChoice(game, playerId, slotIndex) {
   if (!game.pendingWakeChoice) {
     console.log("There's nothing to respond to!");
     return game;
@@ -389,7 +389,7 @@ function respondToWakeChoice(game, playerId, slotIndex) {
 }
 
 // AI policy: pick a random available sleeping cat slot.
-function respondToWakeChoiceAsAi(game, playerId) {
+export function respondToWakeChoiceAsAi(game, playerId) {
   const availableSlots = getAvailableSlots(game);
 
   if (availableSlots.length === 0) {
@@ -402,14 +402,14 @@ function respondToWakeChoiceAsAi(game, playerId) {
   return respondToWakeChoice(game, playerId, randomSlot);
 }
 
-function resolveFishSteal(game, attackerId, targetId) {
+export function resolveFishSteal(game, attackerId, targetId) {
   const attacker = game.players[attackerId];
   const targetPlayer = game.players[targetId];
   const stolenCat = targetPlayer.cats.shift();
   giveCatToPlayer(game, attacker, stolenCat);
 }
 
-function resolveCatnip(game, targetId, targetCatIndex) {
+export function resolveCatnip(game, targetId, targetCatIndex) {
   const targetPlayer = game.players[targetId];
   const [cat] = targetPlayer.cats.splice(targetCatIndex, 1);
   putCatBackToSleep(game, cat);
@@ -417,7 +417,7 @@ function resolveCatnip(game, targetId, targetCatIndex) {
 
 // Shared end-of-turn bookkeeping: clear any pending state, check for a
 // winner, and advance the turn if the game isn't over.
-function finishTurn(game) {
+export function finishTurn(game) {
   game.pendingAction = null;
   game.pendingWakeChoice = null;
 
@@ -431,7 +431,7 @@ function finishTurn(game) {
   advanceTurn(game);
 }
 
-function playLaserPointer(game, playerId, cardIndex) {
+export function playLaserPointer(game, playerId, cardIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -480,7 +480,7 @@ function playLaserPointer(game, playerId, cardIndex) {
   return game;
 }
 
-function drawCard(game, player) {
+export function drawCard(game, player) {
   if (game.deck.length === 0) {
     reshuffleDiscardIntoDeck(game);
   }
@@ -493,7 +493,7 @@ function drawCard(game, player) {
 
 // When the draw pile runs dry, shuffle the discard pile into a fresh deck
 // so the game can keep going instead of stalling.
-function reshuffleDiscardIntoDeck(game) {
+export function reshuffleDiscardIntoDeck(game) {
   if (game.discardPile.length === 0) {
     return;
   }
@@ -503,12 +503,12 @@ function reshuffleDiscardIntoDeck(game) {
   console.log("Deck was empty — reshuffled the discard pile into a new deck.");
 }
 
-function advanceTurn(game) {
+export function advanceTurn(game) {
   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
 }
 
 
-function createGame(numPlayers) {
+export function createGame(numPlayers) {
   const deck = shuffleDeck(createDeck());
   const { hands, remainingDeck } = dealHands(deck, numPlayers);
 
@@ -529,13 +529,13 @@ function createGame(numPlayers) {
 
 // Official Sleeping Queens lowers the win bar for bigger tables: 4 cats /
 // 40 points for 4-5 players, vs 5 cats / 50 points for 2-3 players.
-function getWinThresholds(numPlayers) {
+export function getWinThresholds(numPlayers) {
   return numPlayers >= 4
     ? { cats: 4, points: 40 }
     : { cats: 5, points: 50 };
 }
 
-function checkWinner(game) {
+export function checkWinner(game) {
   const thresholds = getWinThresholds(game.players.length);
 
   for (const player of game.players) {
@@ -555,7 +555,7 @@ function checkWinner(game) {
   return null; // no winner yet
 }
 
-function getPointsLeader(game) {
+export function getPointsLeader(game) {
   return game.players.reduce((leader, player) => {
     if (getPlayerPoints(player) > getPlayerPoints(leader)) return player;
     if (getPlayerPoints(player) === getPlayerPoints(leader) && player.cats.length > leader.cats.length) return player;
@@ -563,7 +563,7 @@ function getPointsLeader(game) {
   });
 }
 
-function discardCard(game, playerId, cardIndex) {
+export function discardCard(game, playerId, cardIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -588,7 +588,7 @@ function discardCard(game, playerId, cardIndex) {
 // A math discard is valid if every card is a Number card, and either:
 //  - exactly two cards share the same value (a matching pair), or
 //  - three or more cards where the largest value equals the sum of the rest
-function isValidMathDiscard(cards) {
+export function isValidMathDiscard(cards) {
   if (cards.length < 2 || !cards.every(c => c.type === "number")) {
     return false;
   }
@@ -606,7 +606,7 @@ function isValidMathDiscard(cards) {
 
 // Discard a matching pair (e.g. two 5s) or an addition set (e.g. 2 + 5 = 7)
 // of Number cards in one go, drawing a replacement for each card discarded.
-function discardMathSet(game, playerId, cardIndices) {
+export function discardMathSet(game, playerId, cardIndices) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -645,44 +645,4 @@ function discardMathSet(game, playerId, cardIndices) {
   finishTurn(game);
 
   return game;
-}
-
-// Node (CommonJS) only — a no-op in the browser, where these are already
-// plain globals from the <script> tag.
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    createDeck,
-    shuffleDeck,
-    dealHands,
-    createCats,
-    createSleepingCats,
-    getPlayerPoints,
-    getAvailableSlots,
-    wakeCatAtSlot,
-    putCatBackToSleep,
-    giveCatToPlayer,
-    validateTurn,
-    playDog,
-    playFish,
-    playCatnip,
-    respondToPendingAction,
-    getBlockCardIndex,
-    respondAsAi,
-    respondToWakeChoice,
-    respondToWakeChoiceAsAi,
-    resolveFishSteal,
-    resolveCatnip,
-    finishTurn,
-    playLaserPointer,
-    drawCard,
-    reshuffleDiscardIntoDeck,
-    advanceTurn,
-    createGame,
-    getWinThresholds,
-    checkWinner,
-    getPointsLeader,
-    discardCard,
-    isValidMathDiscard,
-    discardMathSet
-  };
 }
