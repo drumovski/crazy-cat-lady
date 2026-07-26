@@ -348,6 +348,10 @@ function playLaserPointer(game, playerId, cardIndex) {
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
 
+  if (game.deck.length === 0) {
+    reshuffleDiscardIntoDeck(game);
+  }
+
   const revealedCard = game.deck.shift();
 
   if (revealedCard === undefined) {
@@ -380,10 +384,26 @@ function playLaserPointer(game, playerId, cardIndex) {
 }
 
 function drawCard(game, player) {
+  if (game.deck.length === 0) {
+    reshuffleDiscardIntoDeck(game);
+  }
+
   if (game.deck.length > 0) {
     const newCard = game.deck.shift();
     player.hand.push(newCard);
   }
+}
+
+// When the draw pile runs dry, shuffle the discard pile into a fresh deck
+// so the game can keep going instead of stalling.
+function reshuffleDiscardIntoDeck(game) {
+  if (game.discardPile.length === 0) {
+    return;
+  }
+
+  game.deck = shuffleDeck(game.discardPile);
+  game.discardPile = [];
+  console.log("Deck was empty — reshuffled the discard pile into a new deck.");
 }
 
 function advanceTurn(game) {
@@ -603,3 +623,26 @@ function testAiAutoBlocks() {
 }
 
 testAiAutoBlocks();
+
+function testDeckReshuffle() {
+  const game = createGame(2);
+
+  // Empty the deck, but leave some cards sitting in the discard pile
+  game.deck = [];
+  game.discardPile = [
+    { type: "number", value: 3 },
+    { type: "number", value: 7 },
+    { type: "dog" }
+  ];
+
+  const player = game.players[0];
+  const handSizeBefore = player.hand.length;
+
+  drawCard(game, player);
+
+  console.log("Discard pile reshuffled into deck (should be empty):", game.discardPile.length === 0);
+  console.log("Deck now has cards (should be true):", game.deck.length > 0);
+  console.log("Player drew a card (should be true):", player.hand.length === handSizeBefore + 1);
+}
+
+testDeckReshuffle();
