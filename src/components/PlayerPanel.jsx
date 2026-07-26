@@ -31,12 +31,13 @@ export default function PlayerPanel({
           <button
             key={cat.id}
             type="button"
-            className="mini-cat"
-            title={`${cat.name} (${cat.points} pts)`}
+            className="cat-chip"
             onClick={catsSelectable ? () => onCatClick(catIndex) : undefined}
             disabled={!catsSelectable}
           >
-            🐱
+            <span className="cat-chip-emoji">🐱</span>
+            <span className="cat-chip-name">{cat.name}</span>
+            <span className="cat-chip-points">{cat.points} pts</span>
           </button>
         ))}
       </div>

@@ -139,24 +139,34 @@ button {
 .player-cats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 8px;
-  min-height: 28px;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 20px;
 }
 
-.mini-cat {
-  border: none;
-  background: none;
-  font-size: 20px;
-  line-height: 1;
-  padding: 2px;
-  border-radius: 4px;
+.cat-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 3px 10px 3px 6px;
+  font-size: 12px;
+  color: var(--text-h);
 }
-.mini-cat:not(:disabled):hover {
+.cat-chip:not(:disabled):hover {
+  border-color: var(--accent-border);
   background: var(--accent-bg);
 }
-.mini-cat:disabled {
+.cat-chip:disabled {
   cursor: default;
+}
+.cat-chip-emoji {
+  font-size: 15px;
+}
+.cat-chip-points {
+  color: var(--text);
 }
 
 .player-hand {
@@ -243,11 +253,14 @@ button {
   opacity: 0.35;
 }
 
-.math-discard-controls {
+.discard-controls {
   display: flex;
   align-items: center;
-  gap: 16px;
-  font-size: 14px;
+  gap: 12px;
+}
+
+.discard-hint {
+  font-size: 13px;
   color: var(--text);
 }
 

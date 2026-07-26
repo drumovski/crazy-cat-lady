@@ -415,11 +415,24 @@ export function resolveCatnip(game, targetId, targetCatIndex) {
   putCatBackToSleep(game, cat);
 }
 
+const CARD_TYPE_LABELS = {
+  dog: "Dog",
+  fish: "Fish",
+  seagull: "Seagull",
+  catnip: "Catnip",
+  snail: "Snail",
+  laser: "Laser Pointer"
+};
+
 // Shared end-of-turn bookkeeping: clear any pending state, check for a
-// winner, and advance the turn if the game isn't over.
-export function finishTurn(game) {
+// winner, and advance the turn if the game isn't over. `message` is a short
+// player-facing description of what just happened (e.g. for actions with no
+// other visible effect) — it's cleared by default so stale messages don't
+// linger past the next action.
+export function finishTurn(game, message = null) {
   game.pendingAction = null;
   game.pendingWakeChoice = null;
+  game.lastMessage = message;
 
   const winnerId = checkWinner(game);
   if (winnerId !== null) {
@@ -456,6 +469,8 @@ export function playLaserPointer(game, playerId, cardIndex) {
   if (revealedCard === undefined) {
     // Nothing left to reveal — just draw back up if possible.
     drawCard(game, player);
+    finishTurn(game, "No cards left to reveal.");
+    return game;
   } else if (revealedCard.type === "number") {
     game.discardPile.push(revealedCard);
 
@@ -466,16 +481,19 @@ export function playLaserPointer(game, playerId, cardIndex) {
 
     if (getAvailableSlots(game).length > 0) {
       game.pendingWakeChoice = { playerId: targetIndex, bonus: false };
+      game.lastMessage = null;
       console.log(`Player ${targetIndex} may wake a sleeping cat!`);
       return game; // wait for respondToWakeChoice — turn does not advance yet
     }
-  } else {
-    // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
-    // as their replacement draw.
-    player.hand.push(revealedCard);
+
+    finishTurn(game, `Revealed a number card, but no sleeping cats are left to wake.`);
+    return game;
   }
 
-  finishTurn(game);
+  // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
+  // as their replacement draw.
+  player.hand.push(revealedCard);
+  finishTurn(game, `Laser Pointer revealed a ${CARD_TYPE_LABELS[revealedCard.type]} — added to your hand.`);
 
   return game;
 }
@@ -523,7 +541,8 @@ export function createGame(numPlayers) {
     sleepingCats: createSleepingCats(),
     currentPlayerIndex: 0,
     pendingAction: null,
-    pendingWakeChoice: null
+    pendingWakeChoice: null,
+    lastMessage: null
   };
 }
 

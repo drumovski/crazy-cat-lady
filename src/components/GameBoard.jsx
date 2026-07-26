@@ -1,6 +1,7 @@
 import { useState } from "react";
 import PlayerPanel from "./PlayerPanel.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
+import { isValidMathDiscard } from "../game/engine.js";
 
 // selection.mode drives what a click on a card/opponent/cat/slot means next:
 //   'dog'          -> next: click a sleeping slot to wake
@@ -22,8 +23,7 @@ export default function GameBoard({
   onRespondToWakeChoice
 }) {
   const [selection, setSelection] = useState(EMPTY_SELECTION);
-  const [mathDiscardMode, setMathDiscardMode] = useState(false);
-  const [mathIndices, setMathIndices] = useState([]);
+  const [discardSelection, setDiscardSelection] = useState([]);
 
   if (game.winner !== undefined) {
     return <WinScreen game={game} onNewGame={onNewGame} />;
@@ -39,12 +39,11 @@ export default function GameBoard({
 
   function resetSelection() {
     setSelection(EMPTY_SELECTION);
-    setMathDiscardMode(false);
-    setMathIndices([]);
+    setDiscardSelection([]);
   }
 
-  function toggleMathIndex(cardIndex) {
-    setMathIndices(prev =>
+  function toggleDiscardIndex(cardIndex) {
+    setDiscardSelection(prev =>
       prev.includes(cardIndex) ? prev.filter(i => i !== cardIndex) : [...prev, cardIndex]
     );
   }
@@ -60,10 +59,9 @@ export default function GameBoard({
       return;
     }
 
-    if (mathDiscardMode) {
-      if (card.type === "number") {
-        toggleMathIndex(cardIndex);
-      }
+    // Mid-flow choosing a target/slot/cat for Dog/Fish/Catnip — further hand
+    // clicks are ignored; use Cancel or "Discard This Card Instead" below.
+    if (selection.mode) {
       return;
     }
 
@@ -79,11 +77,9 @@ export default function GameBoard({
         break;
       case "laser":
         onPlayLaserPointer(activePlayerId, cardIndex);
-        resetSelection();
         break;
-      default: // number, seagull, snail on a normal turn
-        onDiscard(activePlayerId, cardIndex);
-        resetSelection();
+      default: // number, seagull, snail — toggle into the discard selection
+        toggleDiscardIndex(cardIndex);
     }
   }
 
@@ -115,6 +111,11 @@ export default function GameBoard({
     }
   }
 
+  function discardSelectedCardInstead() {
+    onDiscard(activePlayerId, selection.cardIndex);
+    resetSelection();
+  }
+
   const isPanelSelectableForFish =
     selection.mode === "fish" &&
     (id => id !== activePlayerId && game.players[id].cats.length > 0);
@@ -123,6 +124,20 @@ export default function GameBoard({
     (id => id !== activePlayerId && game.players[id].cats.length > 0);
 
   const sleepingSelectable = Boolean(game.pendingWakeChoice) || selection.mode === "dog";
+
+  const discardCards = discardSelection.map(i => activePlayer.hand[i]);
+  const discardIsMathSet = discardSelection.length >= 2;
+  const canConfirmDiscard =
+    discardSelection.length === 1 || (discardIsMathSet && isValidMathDiscard(discardCards));
+
+  function confirmDiscard() {
+    if (discardSelection.length === 1) {
+      onDiscard(activePlayerId, discardSelection[0]);
+    } else {
+      onDiscardMathSet(activePlayerId, discardSelection);
+    }
+    resetSelection();
+  }
 
   return (
     <div className="game-board">
@@ -162,21 +177,26 @@ export default function GameBoard({
           {selection.mode === "fish" && "Choose an opponent to steal a cat from."}
           {selection.mode === "catnip-target" && "Choose an opponent to send a cat back to sleep."}
           {selection.mode === "catnip-cat" && "Choose which of their cats to put to sleep."}
+          <button type="button" className="secondary-button" onClick={discardSelectedCardInstead}>
+            Discard This Card Instead
+          </button>
           <button type="button" className="secondary-button" onClick={resetSelection}>
             Cancel
           </button>
         </div>
       )}
 
+      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
+        <div className="banner">{game.lastMessage}</div>
+      )}
+
       <div className="players-row">
         {game.players.map(player => {
           const isActive = player.id === activePlayerId;
           const selectedCardIndices = isActive
-            ? mathDiscardMode
-              ? mathIndices
-              : selection.cardIndex !== undefined
+            ? selection.cardIndex !== undefined
               ? [selection.cardIndex]
-              : []
+              : discardSelection
             : [];
 
           return (
@@ -208,33 +228,30 @@ export default function GameBoard({
         />
       </div>
 
-      {!game.pendingAction && !game.pendingWakeChoice && (
-        <div className="math-discard-controls">
-          <label>
-            <input
-              type="checkbox"
-              checked={mathDiscardMode}
-              onChange={e => {
-                setMathDiscardMode(e.target.checked);
-                setMathIndices([]);
-                setSelection(EMPTY_SELECTION);
-              }}
-            />
-            Discard a matching pair or sum (select 2+ Number cards)
-          </label>
-          {mathDiscardMode && mathIndices.length >= 2 && (
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => {
-                onDiscardMathSet(activePlayerId, mathIndices);
-                resetSelection();
-              }}
-            >
-              Discard Selected ({mathIndices.length})
-            </button>
+      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
+        <div className="discard-controls">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={confirmDiscard}
+            disabled={!canConfirmDiscard}
+          >
+            Discard Selected ({discardSelection.length})
+          </button>
+          <button type="button" className="secondary-button" onClick={resetSelection}>
+            Clear
+          </button>
+          {discardIsMathSet && !canConfirmDiscard && (
+            <span className="discard-hint">Not a matching pair or a valid sum.</span>
           )}
         </div>
+      )}
+
+      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
+        <p className="discard-hint">
+          Click a Number/Seagull/Snail card to select it for discard — select 2+ Number cards for a
+          matching pair or sum.
+        </p>
       )}
     </div>
   );
