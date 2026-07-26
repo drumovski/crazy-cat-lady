@@ -214,6 +214,11 @@ function playFish(game, playerId, cardIndex, targetPlayerId) {
     return game;
   }
 
+  if (targetPlayerId === playerId) {
+    console.log("You can't target yourself!");
+    return game;
+  }
+
   const targetPlayer = game.players[targetPlayerId];
 
   if (!targetPlayer || targetPlayer.cats.length === 0) {
@@ -259,6 +264,11 @@ function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
 
   if (card.type !== "catnip") {
     console.log("That's not Catnip!");
+    return game;
+  }
+
+  if (targetPlayerId === playerId) {
+    console.log("You can't target yourself!");
     return game;
   }
 
@@ -949,3 +959,37 @@ function testPointsWinCondition() {
 }
 
 testPointsWinCondition();
+
+function testFishRejectsSelfTarget() {
+  const game = createGame(2);
+
+  game.players[0].hand[0] = { type: "fish" };
+  testGiveAnyCatToPlayer(game, game.players[0]);
+
+  const catsBefore = game.players[0].cats.length;
+  const currentPlayerBefore = game.currentPlayerIndex;
+
+  playFish(game, 0, 0, 0); // player 0 targeting themselves
+
+  console.log("Fish self-target rejected — cats unchanged:", game.players[0].cats.length === catsBefore);
+  console.log("Fish self-target rejected — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
+}
+
+testFishRejectsSelfTarget();
+
+function testCatnipRejectsSelfTarget() {
+  const game = createGame(2);
+
+  game.players[0].hand[0] = { type: "catnip" };
+  testGiveAnyCatToPlayer(game, game.players[0]);
+
+  const catsBefore = game.players[0].cats.length;
+  const currentPlayerBefore = game.currentPlayerIndex;
+
+  playCatnip(game, 0, 0, 0, 0); // player 0 targeting themselves
+
+  console.log("Catnip self-target rejected — cats unchanged:", game.players[0].cats.length === catsBefore);
+  console.log("Catnip self-target rejected — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
+}
+
+testCatnipRejectsSelfTarget();
