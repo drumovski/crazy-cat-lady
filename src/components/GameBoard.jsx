@@ -14,6 +14,7 @@ const EMPTY_SELECTION = {};
 export default function GameBoard({
   game,
   aiPlayerIds = [],
+  myPlayerId, // undefined in local hotseat mode; a specific seat in online mode
   onNewGame,
   onPlayDog,
   onPlayFish,
@@ -38,7 +39,15 @@ export default function GameBoard({
     : game.currentPlayerIndex;
 
   const activePlayer = game.players[activePlayerId];
-  const isAiTurn = aiPlayerIds.includes(activePlayerId);
+  const isAiDecision = aiPlayerIds.includes(activePlayerId);
+  const isOnline = myPlayerId !== undefined;
+
+  // Local hotseat: the shared screen reveals whoever needs to act next, and
+  // anyone (the physical human at the keyboard) can act for them unless it's
+  // an AI's turn. Online: a client only ever sees its own seat's hand, and
+  // can only act when it's genuinely that seat's turn/decision.
+  const revealSeat = isOnline ? myPlayerId : activePlayerId;
+  const canInteract = isOnline ? activePlayerId === myPlayerId : !isAiDecision;
 
   function resetSelection() {
     setSelection(EMPTY_SELECTION);
@@ -156,11 +165,15 @@ export default function GameBoard({
         </button>
       </div>
 
-      {isAiTurn && (
-        <div className="banner">🤖 Player {activePlayerId + 1} (AI) is thinking…</div>
+      {!canInteract && (
+        <div className="banner">
+          {isAiDecision
+            ? `🤖 Player ${activePlayerId + 1} (AI) is thinking…`
+            : `Waiting for Player ${activePlayerId + 1}…`}
+        </div>
       )}
 
-      {!isAiTurn && game.pendingAction && (
+      {canInteract && game.pendingAction && (
         <div className="banner">
           Player {game.pendingAction.targetId + 1}: block with a{" "}
           {game.pendingAction.type === "fish" ? "Seagull" : "Snail"}, or let it happen.
@@ -174,13 +187,13 @@ export default function GameBoard({
         </div>
       )}
 
-      {!isAiTurn && game.pendingWakeChoice && (
+      {canInteract && game.pendingWakeChoice && (
         <div className="banner">
           Player {game.pendingWakeChoice.playerId + 1}: choose a sleeping cat to wake!
         </div>
       )}
 
-      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && selection.mode && (
+      {canInteract && !game.pendingAction && !game.pendingWakeChoice && selection.mode && (
         <div className="banner">
           {selection.mode === "dog" && "Choose a sleeping cat slot to wake."}
           {selection.mode === "fish-target" && "Choose an opponent to steal a cat from."}
@@ -196,14 +209,15 @@ export default function GameBoard({
         </div>
       )}
 
-      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
+      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
         <div className="banner">{game.lastMessage}</div>
       )}
 
       <div className="players-row">
         {game.players.map(player => {
-          const isActive = player.id === activePlayerId && !isAiTurn;
-          const selectedCardIndices = isActive
+          const isRevealed = player.id === revealSeat;
+          const isInteractive = isRevealed && canInteract;
+          const selectedCardIndices = isInteractive
             ? selection.cardIndex !== undefined
               ? [selection.cardIndex]
               : discardSelection
@@ -214,18 +228,18 @@ export default function GameBoard({
               key={player.id}
               player={player}
               isAi={aiPlayerIds.includes(player.id)}
-              isActive={isActive}
+              isActive={isRevealed}
               isCurrentTurn={player.id === game.currentPlayerIndex}
               selectedCardIndices={selectedCardIndices}
-              onCardClick={isActive ? handleCardClick : undefined}
+              onCardClick={isInteractive ? handleCardClick : undefined}
               panelSelectable={
-                !isAiTurn &&
+                canInteract &&
                 ((isPanelSelectableForFish && isPanelSelectableForFish(player.id)) ||
                   (isPanelSelectableForCatnipTarget && isPanelSelectableForCatnipTarget(player.id)))
               }
               onPanelClick={() => handlePlayerPanelClick(player.id)}
               catsSelectable={
-                !isAiTurn &&
+                canInteract &&
                 (selection.mode === "fish-cat" || selection.mode === "catnip-cat") &&
                 selection.targetPlayerId === player.id
               }
@@ -240,11 +254,11 @@ export default function GameBoard({
         <SleepingCatsGrid
           sleepingCats={game.sleepingCats}
           onSlotClick={handleSlotClick}
-          selectable={!isAiTurn && sleepingSelectable}
+          selectable={canInteract && sleepingSelectable}
         />
       </div>
 
-      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
+      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
         <div className="discard-controls">
           <button
             type="button"
@@ -263,7 +277,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
+      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
         <p className="discard-hint">
           Click a Number/Seagull/Snail card to select it for discard — select 2+ Number cards for a
           matching pair or sum.
