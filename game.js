@@ -209,7 +209,7 @@ function playFish(game, playerId, cardIndex, targetPlayerId) {
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
 
-  if (card.type !== "fish") {
+  if (!card || card.type !== "fish") {
     console.log("That's not a Fish!");
     return game;
   }
@@ -262,7 +262,7 @@ function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
 
-  if (card.type !== "catnip") {
+  if (!card || card.type !== "catnip") {
     console.log("That's not Catnip!");
     return game;
   }
@@ -463,7 +463,7 @@ function playLaserPointer(game, playerId, cardIndex) {
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
 
-  if (card.type !== "laser") {
+  if (!card || card.type !== "laser") {
     console.log("That's not a Laser Pointer!");
     return game;
   }
@@ -578,6 +578,11 @@ function discardCard(game, playerId, cardIndex) {
 
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
+
+  if (!card) {
+    console.log("Invalid card index!");
+    return game;
+  }
 
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
@@ -993,3 +998,22 @@ function testCatnipRejectsSelfTarget() {
 }
 
 testCatnipRejectsSelfTarget();
+
+function testInvalidCardIndexIsRejected() {
+  const game = createGame(2);
+  const player = game.players[0];
+  const handSizeBefore = player.hand.length;
+  const discardSizeBefore = game.discardPile.length;
+  const currentPlayerBefore = game.currentPlayerIndex;
+
+  playFish(game, 0, 99, 1);
+  playCatnip(game, 0, 99, 1, 0);
+  playLaserPointer(game, 0, 99);
+  discardCard(game, 0, 99);
+
+  console.log("Invalid card index — hand untouched:", player.hand.length === handSizeBefore);
+  console.log("Invalid card index — discard pile untouched:", game.discardPile.length === discardSizeBefore);
+  console.log("Invalid card index — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
+}
+
+testInvalidCardIndexIsRejected();
