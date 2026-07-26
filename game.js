@@ -551,13 +551,40 @@ function createGame(numPlayers) {
   };
 }
 
+// Official Sleeping Queens lowers the win bar for bigger tables: 4 cats /
+// 40 points for 4-5 players, vs 5 cats / 50 points for 2-3 players.
+function getWinThresholds(numPlayers) {
+  return numPlayers >= 4
+    ? { cats: 4, points: 40 }
+    : { cats: 5, points: 50 };
+}
+
 function checkWinner(game) {
+  const thresholds = getWinThresholds(game.players.length);
+
   for (const player of game.players) {
-    if (player.cats.length >= 5 || getPlayerPoints(player) >= 50) {
+    if (player.cats.length >= thresholds.cats || getPlayerPoints(player) >= thresholds.points) {
       return player.id;
     }
   }
+
+  // With 3+ players, all 12 cats can end up distributed without anyone
+  // crossing the threshold (e.g. three players with 4 cats/~45 points
+  // each). Once there's nothing left to wake or fight over, break the tie
+  // by points (then by cat count, then by lowest player id).
+  if (game.sleepingCats.every(slot => slot === null)) {
+    return getPointsLeader(game).id;
+  }
+
   return null; // no winner yet
+}
+
+function getPointsLeader(game) {
+  return game.players.reduce((leader, player) => {
+    if (getPlayerPoints(player) > getPlayerPoints(leader)) return player;
+    if (getPlayerPoints(player) === getPlayerPoints(leader) && player.cats.length > leader.cats.length) return player;
+    return leader;
+  });
 }
 
 function discardCard(game, playerId, cardIndex) {
@@ -1028,3 +1055,83 @@ function testPlayDogRejectsInvalidPlayerIdWithoutCrashing() {
 }
 
 testPlayDogRejectsInvalidPlayerIdWithoutCrashing();
+
+function testWinThresholdScalesWithFourPlayers() {
+  const game = createGame(4);
+  const player = game.players[0];
+
+  // 4 cats, well under 40 points — should still win on cat count alone
+  player.cats = [
+    { type: "cat", id: 200, name: "Bengal", points: 5 },
+    { type: "cat", id: 201, name: "Siamese", points: 5 },
+    { type: "cat", id: 202, name: "Toyger", points: 10 },
+    { type: "cat", id: 203, name: "Ragdoll", points: 10 }
+  ];
+
+  console.log("4-player game wins at 4 cats (should be 0):", checkWinner(game) === 0);
+}
+
+testWinThresholdScalesWithFourPlayers();
+
+function testPointsThresholdScalesWithFourPlayers() {
+  const game = createGame(4);
+  const player = game.players[0];
+
+  // 20 + 20 = 40 points from just 2 cats — should win despite < 4 cats
+  player.cats = [
+    { type: "cat", id: 210, name: "Maine Coon", points: 20 },
+    { type: "cat", id: 211, name: "Maine Coon (test dupe)", points: 20 }
+  ];
+
+  console.log("4-player game wins at 40 points with only 2 cats:", checkWinner(game) === 0);
+}
+
+testPointsThresholdScalesWithFourPlayers();
+
+function testTwoPlayerThresholdUnaffected() {
+  const game = createGame(2);
+  const player = game.players[0];
+
+  // 4 cats worth 30 points total — should NOT win in a 2-player game
+  // (needs 5 cats or 50 points)
+  player.cats = [
+    { type: "cat", id: 220, name: "Toyger", points: 10 },
+    { type: "cat", id: 221, name: "Ragdoll", points: 10 },
+    { type: "cat", id: 222, name: "Bombay", points: 5 },
+    { type: "cat", id: 223, name: "Russian Blue", points: 5 }
+  ];
+
+  console.log("2-player game does NOT win at 4 cats/30 points:", checkWinner(game) === null);
+}
+
+testTwoPlayerThresholdUnaffected();
+
+function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
+  const game = createGame(3);
+
+  // All 12 cats distributed, 4 each, nobody hits the 5-cat threshold.
+  // Player 1 has the most points and should win the tiebreak.
+  game.sleepingCats = game.sleepingCats.map(() => null);
+  game.players[0].cats = [
+    { type: "cat", id: 300, points: 5 },
+    { type: "cat", id: 301, points: 5 },
+    { type: "cat", id: 302, points: 10 },
+    { type: "cat", id: 303, points: 10 }
+  ];
+  game.players[1].cats = [
+    { type: "cat", id: 304, points: 20 },
+    { type: "cat", id: 305, points: 15 },
+    { type: "cat", id: 306, points: 15 },
+    { type: "cat", id: 307, points: 5 }
+  ];
+  game.players[2].cats = [
+    { type: "cat", id: 308, points: 10 },
+    { type: "cat", id: 309, points: 10 },
+    { type: "cat", id: 310, points: 5 },
+    { type: "cat", id: 311, points: 5 }
+  ];
+
+  console.log("All cats awake, no threshold met, tiebreak picks the points leader (should be 1):", checkWinner(game) === 1);
+}
+
+testAllCatsAwakeWithNoWinnerBreaksTieByPoints();
