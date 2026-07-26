@@ -66,15 +66,78 @@ function dealHands(deck, numPlayers, handSize = 5) {
   return { hands, remainingDeck };
 }
 
+// pairKey: cats sharing a pairKey can't both be in the same player's
+// collection at once (see giveCatToPlayer) — the two Ginger Toms.
+// wakesBonus: waking this cat lets the same player immediately pick one more
+// sleeping cat slot to wake (the Sphynx).
 function createCats() {
-  const cats = [];
-  for (let i = 0; i < 12; i++) {
-    cats.push({ type: "cat", id: i, awake: false });
-  }
-  return cats;
+  const roster = [
+    { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
+    { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
+    { name: "Maine Coon", points: 20 },
+    { name: "Calico", points: 15 },
+    { name: "Persian", points: 15 },
+    { name: "Toyger", points: 10 },
+    { name: "Ragdoll", points: 10 },
+    { name: "Bombay", points: 10 },
+    { name: "Russian Blue", points: 10 },
+    { name: "Sphynx", points: 5, wakesBonus: true },
+    { name: "Siamese", points: 5 },
+    { name: "Bengal", points: 5 }
+  ];
+
+  return roster.map((cat, id) => ({ type: "cat", id, ...cat }));
 }
 
-function playDog(game, playerId, cardIndex) {
+// The 12 cats are dealt face-down into fixed slots, like the physical game's
+// grid — sleepingCats[slot] holds the cat asleep there, or null once it's
+// been woken. Slots never move, and a cat always returns to its own slot
+// (see putCatBackToSleep), so a player can remember and re-target a spot.
+function createSleepingCats() {
+  return shuffleDeck(createCats()).map((cat, slot) => ({ ...cat, slot, awake: false }));
+}
+
+function getPlayerPoints(player) {
+  return player.cats.reduce((sum, cat) => sum + cat.points, 0);
+}
+
+function getAvailableSlots(game) {
+  return game.sleepingCats
+    .map((cat, slot) => (cat !== null ? slot : null))
+    .filter(slot => slot !== null);
+}
+
+function wakeCatAtSlot(game, slotIndex) {
+  const cat = game.sleepingCats[slotIndex];
+  cat.awake = true;
+  game.sleepingCats[slotIndex] = null;
+  return cat;
+}
+
+// Restores a cat to its own home slot — always the same spot it started in.
+function putCatBackToSleep(game, cat) {
+  cat.awake = false;
+  game.sleepingCats[cat.slot] = cat;
+}
+
+// Adds a cat to a player's collection, unless it conflicts with a cat they
+// already hold (same pairKey — e.g. the two Ginger Toms), in which case the
+// new cat goes back to sleep in its own slot instead. Returns true if the cat
+// joined the player's collection.
+function giveCatToPlayer(game, player, cat) {
+  const conflicts = cat.pairKey && player.cats.some(c => c.pairKey === cat.pairKey);
+
+  if (conflicts) {
+    putCatBackToSleep(game, cat);
+    console.log(`${cat.name} conflicts with a cat Player ${player.id} already has — back to sleep it goes!`);
+    return false;
+  }
+
+  player.cats.push(cat);
+  return true;
+}
+
+function playDog(game, playerId, cardIndex, slotIndex) {
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
 
@@ -90,14 +153,19 @@ function playDog(game, playerId, cardIndex) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
 
-  if (card.type !== "dog") {
+  if (!card || card.type !== "dog") {
     console.log("That's not a Dog!");
     return game; // no change
+  }
+
+  if (game.sleepingCats[slotIndex] == null) {
+    console.log("That sleeping cat slot is empty or invalid!");
+    return game;
   }
 
   // Remove the Dog from the player's hand, put it in the discard pile
@@ -106,21 +174,17 @@ function playDog(game, playerId, cardIndex) {
 
   drawCard(game, player);
 
-  // Wake the first sleeping Cat and give it to the player
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  player.cats.push(cat);
+  // Wake the chosen sleeping Cat and give it to the player
+  const cat = wakeCatAtSlot(game, slotIndex);
+  const joined = giveCatToPlayer(game, player, cat);
 
-  // Check for a winner
-  const winnerId = checkWinner(game);
-  if (winnerId !== null) {
-    game.winner = winnerId;
-    console.log(`Player ${winnerId} wins!`);
-    return game; // stop here — don't advance turn, game is over
+  if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
+    game.pendingWakeChoice = { playerId, bonus: true };
+    console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
+    return game; // wait for respondToWakeChoice — turn does not advance yet
   }
 
-  // Advance to the next player
-   advanceTurn(game);
+  finishTurn(game);
 
   return game;
 }
@@ -137,7 +201,7 @@ function playFish(game, playerId, cardIndex, targetPlayerId) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
@@ -169,7 +233,7 @@ function playFish(game, playerId, cardIndex, targetPlayerId) {
   }
 
   resolveFishSteal(game, playerId, targetPlayerId);
-  finishPendingAction(game);
+  finishTurn(game);
 
   return game;
 }
@@ -185,7 +249,7 @@ function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
@@ -222,7 +286,7 @@ function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
   }
 
   resolveCatnip(game, targetPlayerId, targetCatIndex);
-  finishPendingAction(game);
+  finishTurn(game);
 
   return game;
 }
@@ -264,7 +328,7 @@ function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
     resolveCatnip(game, action.targetId, action.catIndex);
   }
 
-  finishPendingAction(game);
+  finishTurn(game);
 
   return game;
 }
@@ -292,24 +356,73 @@ function respondAsAi(game, targetPlayerId) {
   return respondToPendingAction(game, targetPlayerId, blockCardIndex);
 }
 
+// Called by whichever player currently owes a wake pick — either the Jester's
+// (Laser Pointer's) counted-to target, or a player who just woke the Sphynx
+// and gets a bonus wake. slotIndex is the sleeping cat slot they choose.
+function respondToWakeChoice(game, playerId, slotIndex) {
+  if (!game.pendingWakeChoice) {
+    console.log("There's nothing to respond to!");
+    return game;
+  }
+
+  if (playerId !== game.pendingWakeChoice.playerId) {
+    console.log("This isn't your wake choice to make!");
+    return game;
+  }
+
+  if (game.sleepingCats[slotIndex] == null) {
+    console.log("That sleeping cat slot is empty or invalid!");
+    return game;
+  }
+
+  const player = game.players[playerId];
+  const cat = wakeCatAtSlot(game, slotIndex);
+  const joined = giveCatToPlayer(game, player, cat);
+
+  if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
+    game.pendingWakeChoice = { playerId, bonus: true };
+    console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
+    return game; // still pending — pick again
+  }
+
+  game.pendingWakeChoice = null;
+  finishTurn(game);
+
+  return game;
+}
+
+// AI policy: pick a random available sleeping cat slot.
+function respondToWakeChoiceAsAi(game, playerId) {
+  const availableSlots = getAvailableSlots(game);
+
+  if (availableSlots.length === 0) {
+    game.pendingWakeChoice = null;
+    finishTurn(game);
+    return game;
+  }
+
+  const randomSlot = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+  return respondToWakeChoice(game, playerId, randomSlot);
+}
+
 function resolveFishSteal(game, attackerId, targetId) {
   const attacker = game.players[attackerId];
   const targetPlayer = game.players[targetId];
   const stolenCat = targetPlayer.cats.shift();
-  attacker.cats.push(stolenCat);
+  giveCatToPlayer(game, attacker, stolenCat);
 }
 
 function resolveCatnip(game, targetId, targetCatIndex) {
   const targetPlayer = game.players[targetId];
   const [cat] = targetPlayer.cats.splice(targetCatIndex, 1);
-  cat.awake = false;
-  game.sleepingCats.push(cat);
+  putCatBackToSleep(game, cat);
 }
 
-// Shared end-of-action bookkeeping: clear the pending action, check for a
+// Shared end-of-turn bookkeeping: clear any pending state, check for a
 // winner, and advance the turn if the game isn't over.
-function finishPendingAction(game) {
+function finishTurn(game) {
   game.pendingAction = null;
+  game.pendingWakeChoice = null;
 
   const winnerId = checkWinner(game);
   if (winnerId !== null) {
@@ -332,7 +445,7 @@ function playLaserPointer(game, playerId, cardIndex) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
@@ -362,23 +475,21 @@ function playLaserPointer(game, playerId, cardIndex) {
 
     const numPlayers = game.players.length;
     const targetIndex = (playerId + revealedCard.value - 1) % numPlayers;
-    const targetPlayer = game.players[targetIndex];
-
-    if (game.sleepingCats.length > 0) {
-      const randomIndex = Math.floor(Math.random() * game.sleepingCats.length);
-      const [cat] = game.sleepingCats.splice(randomIndex, 1);
-      cat.awake = true;
-      targetPlayer.cats.push(cat);
-    }
 
     drawCard(game, player);
+
+    if (getAvailableSlots(game).length > 0) {
+      game.pendingWakeChoice = { playerId: targetIndex, bonus: false };
+      console.log(`Player ${targetIndex} may wake a sleeping cat!`);
+      return game; // wait for respondToWakeChoice — turn does not advance yet
+    }
   } else {
     // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
     // as their replacement draw.
     player.hand.push(revealedCard);
   }
 
-  finishPendingAction(game);
+  finishTurn(game);
 
   return game;
 }
@@ -423,15 +534,16 @@ function createGame(numPlayers) {
     })),
     deck: remainingDeck,
     discardPile: [],
-    sleepingCats: createCats(),
+    sleepingCats: createSleepingCats(),
     currentPlayerIndex: 0,
-    pendingAction: null
+    pendingAction: null,
+    pendingWakeChoice: null
   };
 }
 
 function checkWinner(game) {
   for (const player of game.players) {
-    if (player.cats.length >= 5) {
+    if (player.cats.length >= 5 || getPlayerPoints(player) >= 50) {
       return player.id;
     }
   }
@@ -449,7 +561,7 @@ function discardCard(game, playerId, cardIndex) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
@@ -461,7 +573,7 @@ function discardCard(game, playerId, cardIndex) {
   game.discardPile.push(card);
 
   drawCard(game, player);
-  advanceTurn(game);
+  finishTurn(game);
 
   return game;
 }
@@ -498,7 +610,7 @@ function discardMathSet(game, playerId, cardIndices) {
     return game;
   }
 
-  if (game.pendingAction) {
+  if (game.pendingAction || game.pendingWakeChoice) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
@@ -534,20 +646,19 @@ function discardMathSet(game, playerId, cardIndices) {
     drawCard(game, player);
   }
 
-  advanceTurn(game);
+  finishTurn(game);
 
   return game;
 }
 
-
-
-
-
-
-
-
-
-
+// Test-only helper: wakes and hands a specific player any one sleeping cat,
+// bypassing turn/card rules, so tests can set up state directly.
+function testGiveAnyCatToPlayer(game, player) {
+  const slot = game.sleepingCats.findIndex(c => c !== null);
+  const cat = wakeCatAtSlot(game, slot);
+  player.cats.push(cat);
+  return cat;
+}
 
 // tests
 function testWinCondition() {
@@ -555,6 +666,13 @@ function testWinCondition() {
 
   let attempts = 0;
   while (game.winner === undefined && attempts < 60) {
+    if (game.pendingWakeChoice) {
+      const slot = game.sleepingCats.findIndex(c => c !== null);
+      respondToWakeChoice(game, game.pendingWakeChoice.playerId, slot);
+      attempts++;
+      continue;
+    }
+
     const currentPlayer = game.players[game.currentPlayerIndex];
     const dogIndex = currentPlayer.hand.findIndex(c => c.type === "dog");
 
@@ -562,7 +680,8 @@ function testWinCondition() {
       // No Dog available — discard the first card instead
       discardCard(game, game.currentPlayerIndex, 0);
     } else {
-      playDog(game, game.currentPlayerIndex, dogIndex);
+      const slotIndex = game.sleepingCats.findIndex(c => c !== null);
+      playDog(game, game.currentPlayerIndex, dogIndex, slotIndex);
     }
 
     attempts++;
@@ -586,9 +705,7 @@ function testFish() {
   game.players[1].hand = game.players[1].hand.filter(c => c.type !== "seagull");
 
   // Force player 1 to already have a cat to steal
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  game.players[1].cats.push(cat);
+  testGiveAnyCatToPlayer(game, game.players[1]);
 
   console.log("Before steal — player 0 cats:", game.players[0].cats.length);
   console.log("Before steal — player 1 cats:", game.players[1].cats.length);
@@ -608,9 +725,7 @@ function testFishBlockedBySeagull() {
   game.players[0].hand[0] = { type: "fish" };
   game.players[1].hand[0] = { type: "seagull" };
 
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  game.players[1].cats.push(cat);
+  testGiveAnyCatToPlayer(game, game.players[1]);
 
   playFish(game, 0, 0, 1);
   console.log("Pending action after Fish (should be 'fish'):", game.pendingAction && game.pendingAction.type);
@@ -631,14 +746,12 @@ function testCatnip() {
   game.players[0].hand[0] = { type: "catnip" };
   game.players[1].hand = game.players[1].hand.filter(c => c.type !== "snail");
 
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  game.players[1].cats.push(cat);
+  const cat = testGiveAnyCatToPlayer(game, game.players[1]);
 
   playCatnip(game, 0, 0, 1, 0); // player 0 puts player 1's cat (index 0) back to sleep
 
   console.log("After Catnip — player 1 cats (should be 0):", game.players[1].cats.length);
-  console.log("After Catnip — sleeping cats gained one back:", game.sleepingCats.some(c => c.id === cat.id));
+  console.log("After Catnip — cat is back asleep in its own slot:", game.sleepingCats[cat.slot] !== null && game.sleepingCats[cat.slot].id === cat.id);
   console.log("Current player (should be 1):", game.currentPlayerIndex);
 }
 
@@ -650,9 +763,7 @@ function testCatnipBlockedBySnail() {
   game.players[0].hand[0] = { type: "catnip" };
   game.players[1].hand[0] = { type: "snail" };
 
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  game.players[1].cats.push(cat);
+  testGiveAnyCatToPlayer(game, game.players[1]);
 
   playCatnip(game, 0, 0, 1, 0);
   respondToPendingAction(game, 1, 0); // player 1 blocks with the Snail at index 0
@@ -672,6 +783,11 @@ function testLaserPointer() {
   const catsBefore = game.players[1].cats.length;
   playLaserPointer(game, 0, 0);
 
+  console.log("Pending wake choice for player 1:", game.pendingWakeChoice && game.pendingWakeChoice.playerId);
+
+  const chosenSlot = game.sleepingCats.findIndex(c => c !== null);
+  respondToWakeChoice(game, 1, chosenSlot);
+
   console.log("After Laser Pointer — player 1 gained a cat:", game.players[1].cats.length === catsBefore + 1);
   console.log("Current player (should be 1):", game.currentPlayerIndex);
 }
@@ -684,9 +800,7 @@ function testAiAutoBlocks() {
   game.players[0].hand[0] = { type: "fish" };
   game.players[1].hand[0] = { type: "seagull" };
 
-  const cat = game.sleepingCats.shift();
-  cat.awake = true;
-  game.players[1].cats.push(cat);
+  testGiveAnyCatToPlayer(game, game.players[1]);
 
   playFish(game, 0, 0, 1);
   respondAsAi(game, 1); // player 1 is AI-controlled — should auto-block since it holds a Seagull
@@ -777,3 +891,61 @@ function testMathDiscardRejectsInvalidSet() {
 }
 
 testMathDiscardRejectsInvalidSet();
+
+function testGingerTomConflict() {
+  const game = createGame(2);
+  const player = game.players[0];
+
+  const gingerToms = game.sleepingCats.filter(c => c !== null && c.pairKey === "gingerTom");
+  const firstSlot = gingerToms[0].slot;
+  const secondSlot = gingerToms[1].slot;
+
+  const firstCat = wakeCatAtSlot(game, firstSlot);
+  giveCatToPlayer(game, player, firstCat);
+
+  const secondCat = wakeCatAtSlot(game, secondSlot);
+  const joined = giveCatToPlayer(game, player, secondCat);
+
+  console.log("Second Ginger Tom rejected (should be false):", joined);
+  console.log("Player still only has 1 cat:", player.cats.length === 1);
+  console.log("Second Ginger Tom back asleep in its own slot:", game.sleepingCats[secondSlot] !== null && game.sleepingCats[secondSlot].pairKey === "gingerTom");
+}
+
+testGingerTomConflict();
+
+function testSphynxBonusWake() {
+  const game = createGame(2);
+
+  const sphynx = game.sleepingCats.find(c => c !== null && c.wakesBonus);
+  game.players[0].hand[0] = { type: "dog" };
+
+  playDog(game, 0, 0, sphynx.slot);
+
+  console.log("Sphynx woken, bonus wake pending for player 0:", game.pendingWakeChoice && game.pendingWakeChoice.playerId === 0);
+  console.log("Turn not yet advanced:", game.currentPlayerIndex === 0);
+
+  const bonusSlot = game.sleepingCats.findIndex(c => c !== null);
+  respondToWakeChoice(game, 0, bonusSlot);
+
+  console.log("Player 0 gained 2 cats from one Dog play:", game.players[0].cats.length === 2);
+  console.log("Current player (should be 1):", game.currentPlayerIndex);
+}
+
+testSphynxBonusWake();
+
+function testPointsWinCondition() {
+  const game = createGame(2);
+  const player = game.players[0];
+
+  // 20 + 15 + 15 = 50 points from just 3 cats — should win despite < 5 cats
+  player.cats = [
+    { type: "cat", id: 100, name: "Maine Coon", points: 20 },
+    { type: "cat", id: 101, name: "Calico", points: 15 },
+    { type: "cat", id: 102, name: "Persian", points: 15 }
+  ];
+
+  const winnerId = checkWinner(game);
+  console.log("Player wins on points with only 3 cats:", winnerId === 0);
+}
+
+testPointsWinCondition();
