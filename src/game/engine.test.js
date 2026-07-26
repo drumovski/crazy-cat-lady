@@ -74,7 +74,7 @@ function testFish() {
   console.log("Before steal — player 0 cats:", game.players[0].cats.length);
   console.log("Before steal — player 1 cats:", game.players[1].cats.length);
 
-  playFish(game, 0, 0, 1); // player 0 plays fish at index 0, targeting player 1
+  playFish(game, 0, 0, 1, 0); // player 0 plays fish at index 0, targeting player 1's cat at index 0
 
   console.log("After steal — player 0 cats:", game.players[0].cats.length);
   console.log("After steal — player 1 cats:", game.players[1].cats.length);
@@ -91,7 +91,7 @@ function testFishBlockedBySeagull() {
 
   testGiveAnyCatToPlayer(game, game.players[1]);
 
-  playFish(game, 0, 0, 1);
+  playFish(game, 0, 0, 1, 0);
   console.log("Pending action after Fish (should be 'fish'):", game.pendingAction && game.pendingAction.type);
 
   respondToPendingAction(game, 1, 0); // player 1 blocks with the Seagull at index 0
@@ -166,7 +166,7 @@ function testAiAutoBlocks() {
 
   testGiveAnyCatToPlayer(game, game.players[1]);
 
-  playFish(game, 0, 0, 1);
+  playFish(game, 0, 0, 1, 0);
   respondAsAi(game, 1); // player 1 is AI-controlled — should auto-block since it holds a Seagull
 
   console.log("AI auto-blocked — player 0 cats (should be 0):", game.players[0].cats.length);
@@ -323,7 +323,7 @@ function testFishRejectsSelfTarget() {
   const catsBefore = game.players[0].cats.length;
   const currentPlayerBefore = game.currentPlayerIndex;
 
-  playFish(game, 0, 0, 0); // player 0 targeting themselves
+  playFish(game, 0, 0, 0, 0); // player 0 targeting themselves
 
   console.log("Fish self-target rejected — cats unchanged:", game.players[0].cats.length === catsBefore);
   console.log("Fish self-target rejected — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
@@ -457,3 +457,22 @@ function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
 }
 
 testAllCatsAwakeWithNoWinnerBreaksTieByPoints();
+
+function testFishStealsChosenCat() {
+  const game = createGame(2);
+
+  game.players[0].hand[0] = { type: "fish" };
+  game.players[1].hand = game.players[1].hand.filter(c => c.type !== "seagull");
+  game.players[1].cats = [
+    { type: "cat", id: 400, name: "Toyger", points: 10 },
+    { type: "cat", id: 401, name: "Bengal", points: 5 },
+    { type: "cat", id: 402, name: "Maine Coon", points: 20 }
+  ];
+
+  playFish(game, 0, 0, 1, 2); // steal the Maine Coon at index 2, not the first cat
+
+  console.log("Stole the chosen cat (Maine Coon), not the first one:", game.players[0].cats[0] && game.players[0].cats[0].id === 402);
+  console.log("Target kept the other two cats:", game.players[1].cats.length === 2 && game.players[1].cats.every(c => c.id !== 402));
+}
+
+testFishStealsChosenCat();

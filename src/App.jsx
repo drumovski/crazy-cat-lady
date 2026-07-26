@@ -30,7 +30,9 @@ export default function App() {
       game={game}
       onNewGame={() => setGame(null)}
       onPlayDog={(playerId, cardIndex, slotIndex) => applyAction(playDog, playerId, cardIndex, slotIndex)}
-      onPlayFish={(playerId, cardIndex, targetPlayerId) => applyAction(playFish, playerId, cardIndex, targetPlayerId)}
+      onPlayFish={(playerId, cardIndex, targetPlayerId, targetCatIndex) =>
+        applyAction(playFish, playerId, cardIndex, targetPlayerId, targetCatIndex)
+      }
       onPlayCatnip={(playerId, cardIndex, targetPlayerId, targetCatIndex) =>
         applyAction(playCatnip, playerId, cardIndex, targetPlayerId, targetCatIndex)
       }

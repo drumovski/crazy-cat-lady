@@ -5,9 +5,10 @@ import { isValidMathDiscard } from "../game/engine.js";
 
 // selection.mode drives what a click on a card/opponent/cat/slot means next:
 //   'dog'          -> next: click a sleeping slot to wake
-//   'fish'         -> next: click an opponent to steal from
+//   'fish-target'  -> next: click an opponent
+//   'fish-cat'     -> next: click one of that opponent's cats to steal
 //   'catnip-target'-> next: click an opponent
-//   'catnip-cat'   -> next: click one of that opponent's cats
+//   'catnip-cat'   -> next: click one of that opponent's cats to put to sleep
 const EMPTY_SELECTION = {};
 
 export default function GameBoard({
@@ -70,7 +71,7 @@ export default function GameBoard({
         setSelection({ mode: "dog", cardIndex });
         break;
       case "fish":
-        setSelection({ mode: "fish", cardIndex });
+        setSelection({ mode: "fish-target", cardIndex });
         break;
       case "catnip":
         setSelection({ mode: "catnip-target", cardIndex });
@@ -96,16 +97,18 @@ export default function GameBoard({
   }
 
   function handlePlayerPanelClick(targetPlayerId) {
-    if (selection.mode === "fish") {
-      onPlayFish(activePlayerId, selection.cardIndex, targetPlayerId);
-      resetSelection();
+    if (selection.mode === "fish-target") {
+      setSelection({ ...selection, mode: "fish-cat", targetPlayerId });
     } else if (selection.mode === "catnip-target") {
       setSelection({ ...selection, mode: "catnip-cat", targetPlayerId });
     }
   }
 
   function handleCatClick(targetPlayerId, catIndex) {
-    if (selection.mode === "catnip-cat" && selection.targetPlayerId === targetPlayerId) {
+    if (selection.mode === "fish-cat" && selection.targetPlayerId === targetPlayerId) {
+      onPlayFish(activePlayerId, selection.cardIndex, targetPlayerId, catIndex);
+      resetSelection();
+    } else if (selection.mode === "catnip-cat" && selection.targetPlayerId === targetPlayerId) {
       onPlayCatnip(activePlayerId, selection.cardIndex, targetPlayerId, catIndex);
       resetSelection();
     }
@@ -117,7 +120,7 @@ export default function GameBoard({
   }
 
   const isPanelSelectableForFish =
-    selection.mode === "fish" &&
+    selection.mode === "fish-target" &&
     (id => id !== activePlayerId && game.players[id].cats.length > 0);
   const isPanelSelectableForCatnipTarget =
     selection.mode === "catnip-target" &&
@@ -174,7 +177,8 @@ export default function GameBoard({
       {!game.pendingAction && !game.pendingWakeChoice && selection.mode && (
         <div className="banner">
           {selection.mode === "dog" && "Choose a sleeping cat slot to wake."}
-          {selection.mode === "fish" && "Choose an opponent to steal a cat from."}
+          {selection.mode === "fish-target" && "Choose an opponent to steal a cat from."}
+          {selection.mode === "fish-cat" && "Choose which of their cats to steal."}
           {selection.mode === "catnip-target" && "Choose an opponent to send a cat back to sleep."}
           {selection.mode === "catnip-cat" && "Choose which of their cats to put to sleep."}
           <button type="button" className="secondary-button" onClick={discardSelectedCardInstead}>
@@ -212,7 +216,10 @@ export default function GameBoard({
                 (isPanelSelectableForCatnipTarget && isPanelSelectableForCatnipTarget(player.id))
               }
               onPanelClick={() => handlePlayerPanelClick(player.id)}
-              catsSelectable={selection.mode === "catnip-cat" && selection.targetPlayerId === player.id}
+              catsSelectable={
+                (selection.mode === "fish-cat" || selection.mode === "catnip-cat") &&
+                selection.targetPlayerId === player.id
+              }
               onCatClick={catIndex => handleCatClick(player.id, catIndex)}
             />
           );

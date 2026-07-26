@@ -199,7 +199,7 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
 }
 
 
-export function playFish(game, playerId, cardIndex, targetPlayerId) {
+export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -219,8 +219,8 @@ export function playFish(game, playerId, cardIndex, targetPlayerId) {
 
   const targetPlayer = game.players[targetPlayerId];
 
-  if (!targetPlayer || targetPlayer.cats.length === 0) {
-    console.log("Target player has no cats to steal!");
+  if (!targetPlayer || !targetPlayer.cats[targetCatIndex]) {
+    console.log("Target player has no such cat to steal!");
     return game;
   }
 
@@ -230,12 +230,17 @@ export function playFish(game, playerId, cardIndex, targetPlayerId) {
 
   const targetHasSeagull = targetPlayer.hand.some(c => c.type === "seagull");
   if (targetHasSeagull) {
-    game.pendingAction = { type: "fish", attackerId: playerId, targetId: targetPlayerId };
+    game.pendingAction = {
+      type: "fish",
+      attackerId: playerId,
+      targetId: targetPlayerId,
+      catIndex: targetCatIndex
+    };
     console.log(`Player ${targetPlayerId} may block with a Seagull!`);
     return game; // wait for respondToPendingAction — turn does not advance yet
   }
 
-  resolveFishSteal(game, playerId, targetPlayerId);
+  resolveFishSteal(game, playerId, targetPlayerId, targetCatIndex);
   finishTurn(game);
 
   return game;
@@ -320,7 +325,7 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
     drawCard(game, targetPlayer);
     console.log(`Blocked with a ${counterType}!`);
   } else if (action.type === "fish") {
-    resolveFishSteal(game, action.attackerId, action.targetId);
+    resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
   } else {
     resolveCatnip(game, action.targetId, action.catIndex);
   }
@@ -402,10 +407,10 @@ export function respondToWakeChoiceAsAi(game, playerId) {
   return respondToWakeChoice(game, playerId, randomSlot);
 }
 
-export function resolveFishSteal(game, attackerId, targetId) {
+export function resolveFishSteal(game, attackerId, targetId, targetCatIndex) {
   const attacker = game.players[attackerId];
   const targetPlayer = game.players[targetId];
-  const stolenCat = targetPlayer.cats.shift();
+  const [stolenCat] = targetPlayer.cats.splice(targetCatIndex, 1);
   giveCatToPlayer(game, attacker, stolenCat);
 }
 
