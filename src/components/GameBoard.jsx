@@ -165,7 +165,7 @@ export default function GameBoard({
         </button>
       </div>
 
-      {!canInteract && (
+      {!canInteract && !game.pendingAction && !game.pendingWakeChoice && (
         <div className="banner">
           {isAiDecision
             ? `🤖 Player ${activePlayerId + 1} (AI) is thinking…`
@@ -173,23 +173,36 @@ export default function GameBoard({
         </div>
       )}
 
-      {canInteract && game.pendingAction && (
-        <div className="banner">
-          Player {game.pendingAction.targetId + 1}: block with a{" "}
-          {game.pendingAction.type === "fish" ? "Seagull" : "Snail"}, or let it happen.
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => onRespondToPendingAction(game.pendingAction.targetId, null)}
-          >
-            Don't Block
-          </button>
-        </div>
-      )}
+      {game.pendingAction && (() => {
+        const action = game.pendingAction;
+        const cat = game.players[action.targetId].cats[action.catIndex];
+        const cardLabel = action.type === "fish" ? "Fish" : "Catnip";
+        const counterType = action.type === "fish" ? "Seagull" : "Snail";
+        const verb = action.type === "fish" ? "steal" : "put to sleep";
+        return (
+          <div className="banner">
+            Player {action.attackerId + 1} played {cardLabel} to {verb} Player {action.targetId + 1}'s{" "}
+            {cat.name}! Player {action.targetId + 1} may block with a {counterType}, or let it happen.
+            {canInteract && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onRespondToPendingAction(action.targetId, null)}
+              >
+                Don't Block
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
-      {canInteract && game.pendingWakeChoice && (
+      {game.pendingWakeChoice && (
         <div className="banner">
-          Player {game.pendingWakeChoice.playerId + 1}: choose a sleeping cat to wake!
+          {game.pendingWakeChoice.actorId === game.pendingWakeChoice.playerId
+            ? `Player ${game.pendingWakeChoice.playerId + 1} gets to wake a bonus sleeping cat!`
+            : `Player ${game.pendingWakeChoice.actorId + 1} played Laser Pointer — the count landed on Player ${
+                game.pendingWakeChoice.playerId + 1
+              }, who may wake a sleeping cat!`}
         </div>
       )}
 

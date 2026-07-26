@@ -188,7 +188,7 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
   const joined = giveCatToPlayer(game, player, cat);
 
   if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
-    game.pendingWakeChoice = { playerId, bonus: true };
+    game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
     return game; // wait for respondToWakeChoice — turn does not advance yet
   }
@@ -240,8 +240,12 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
     return game; // wait for respondToPendingAction — turn does not advance yet
   }
 
+  const stolenCatName = targetPlayer.cats[targetCatIndex].name;
   resolveFishSteal(game, playerId, targetPlayerId, targetCatIndex);
-  finishTurn(game);
+  finishTurn(game, {
+    playerId: targetPlayerId,
+    text: `Player ${playerId + 1} stole your ${stolenCatName} with a Fish!`
+  });
 
   return game;
 }
@@ -287,8 +291,12 @@ export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatI
     return game; // wait for respondToPendingAction — turn does not advance yet
   }
 
+  const sleepyCatName = targetPlayer.cats[targetCatIndex].name;
   resolveCatnip(game, targetPlayerId, targetCatIndex);
-  finishTurn(game);
+  finishTurn(game, {
+    playerId: targetPlayerId,
+    text: `Player ${playerId + 1} put your ${sleepyCatName} back to sleep with Catnip!`
+  });
 
   return game;
 }
@@ -311,6 +319,8 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
   const counterType = action.type === "fish" ? "seagull" : "snail";
   const targetPlayer = game.players[targetPlayerId];
+  const cardLabel = action.type === "fish" ? "Fish" : "Catnip";
+  const catName = targetPlayer.cats[action.catIndex].name;
 
   if (blockCardIndex !== null && blockCardIndex !== undefined) {
     const blockCard = targetPlayer.hand[blockCardIndex];
@@ -324,13 +334,28 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
     game.discardPile.push(blockCard);
     drawCard(game, targetPlayer);
     console.log(`Blocked with a ${counterType}!`);
-  } else if (action.type === "fish") {
-    resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
-  } else {
-    resolveCatnip(game, action.targetId, action.catIndex);
+
+    finishTurn(game, {
+      playerId: action.attackerId,
+      text: `Player ${targetPlayerId + 1} blocked your ${cardLabel} with a ${counterType[0].toUpperCase()}${counterType.slice(1)}!`
+    });
+
+    return game;
   }
 
-  finishTurn(game);
+  if (action.type === "fish") {
+    resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
+    finishTurn(game, {
+      playerId: action.attackerId,
+      text: `You stole Player ${targetPlayerId + 1}'s ${catName} with your Fish!`
+    });
+  } else {
+    resolveCatnip(game, action.targetId, action.catIndex);
+    finishTurn(game, {
+      playerId: action.attackerId,
+      text: `You put Player ${targetPlayerId + 1}'s ${catName} back to sleep with your Catnip!`
+    });
+  }
 
   return game;
 }
@@ -382,7 +407,7 @@ export function respondToWakeChoice(game, playerId, slotIndex) {
   const joined = giveCatToPlayer(game, player, cat);
 
   if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
-    game.pendingWakeChoice = { playerId, bonus: true };
+    game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
     return game; // still pending — pick again
   }
@@ -487,7 +512,7 @@ export function playLaserPointer(game, playerId, cardIndex) {
     drawCard(game, player);
 
     if (getAvailableSlots(game).length > 0) {
-      game.pendingWakeChoice = { playerId: targetIndex, bonus: false };
+      game.pendingWakeChoice = { playerId: targetIndex, bonus: false, actorId: playerId };
       game.lastMessage = null;
       console.log(`Player ${targetIndex} may wake a sleeping cat!`);
       return game; // wait for respondToWakeChoice — turn does not advance yet
