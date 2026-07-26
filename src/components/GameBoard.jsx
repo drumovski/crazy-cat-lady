@@ -13,6 +13,7 @@ const EMPTY_SELECTION = {};
 
 export default function GameBoard({
   game,
+  aiPlayerIds = [],
   onNewGame,
   onPlayDog,
   onPlayFish,
@@ -37,6 +38,7 @@ export default function GameBoard({
     : game.currentPlayerIndex;
 
   const activePlayer = game.players[activePlayerId];
+  const isAiTurn = aiPlayerIds.includes(activePlayerId);
 
   function resetSelection() {
     setSelection(EMPTY_SELECTION);
@@ -154,7 +156,11 @@ export default function GameBoard({
         </button>
       </div>
 
-      {game.pendingAction && (
+      {isAiTurn && (
+        <div className="banner">🤖 Player {activePlayerId + 1} (AI) is thinking…</div>
+      )}
+
+      {!isAiTurn && game.pendingAction && (
         <div className="banner">
           Player {game.pendingAction.targetId + 1}: block with a{" "}
           {game.pendingAction.type === "fish" ? "Seagull" : "Snail"}, or let it happen.
@@ -168,13 +174,13 @@ export default function GameBoard({
         </div>
       )}
 
-      {game.pendingWakeChoice && (
+      {!isAiTurn && game.pendingWakeChoice && (
         <div className="banner">
           Player {game.pendingWakeChoice.playerId + 1}: choose a sleeping cat to wake!
         </div>
       )}
 
-      {!game.pendingAction && !game.pendingWakeChoice && selection.mode && (
+      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && selection.mode && (
         <div className="banner">
           {selection.mode === "dog" && "Choose a sleeping cat slot to wake."}
           {selection.mode === "fish-target" && "Choose an opponent to steal a cat from."}
@@ -190,13 +196,13 @@ export default function GameBoard({
         </div>
       )}
 
-      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
+      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
         <div className="banner">{game.lastMessage}</div>
       )}
 
       <div className="players-row">
         {game.players.map(player => {
-          const isActive = player.id === activePlayerId;
+          const isActive = player.id === activePlayerId && !isAiTurn;
           const selectedCardIndices = isActive
             ? selection.cardIndex !== undefined
               ? [selection.cardIndex]
@@ -207,16 +213,19 @@ export default function GameBoard({
             <PlayerPanel
               key={player.id}
               player={player}
+              isAi={aiPlayerIds.includes(player.id)}
               isActive={isActive}
               isCurrentTurn={player.id === game.currentPlayerIndex}
               selectedCardIndices={selectedCardIndices}
               onCardClick={isActive ? handleCardClick : undefined}
               panelSelectable={
-                (isPanelSelectableForFish && isPanelSelectableForFish(player.id)) ||
-                (isPanelSelectableForCatnipTarget && isPanelSelectableForCatnipTarget(player.id))
+                !isAiTurn &&
+                ((isPanelSelectableForFish && isPanelSelectableForFish(player.id)) ||
+                  (isPanelSelectableForCatnipTarget && isPanelSelectableForCatnipTarget(player.id)))
               }
               onPanelClick={() => handlePlayerPanelClick(player.id)}
               catsSelectable={
+                !isAiTurn &&
                 (selection.mode === "fish-cat" || selection.mode === "catnip-cat") &&
                 selection.targetPlayerId === player.id
               }
@@ -231,11 +240,11 @@ export default function GameBoard({
         <SleepingCatsGrid
           sleepingCats={game.sleepingCats}
           onSlotClick={handleSlotClick}
-          selectable={sleepingSelectable}
+          selectable={!isAiTurn && sleepingSelectable}
         />
       </div>
 
-      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
+      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
         <div className="discard-controls">
           <button
             type="button"
@@ -254,7 +263,7 @@ export default function GameBoard({
         </div>
       )}
 
-      {!game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
+      {!isAiTurn && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
         <p className="discard-hint">
           Click a Number/Seagull/Snail card to select it for discard — select 2+ Number cards for a
           matching pair or sum.

@@ -74,6 +74,18 @@ button {
   font-size: 14px;
 }
 
+.setup-ai-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.setup-ai-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Game board */
 .board-header {
   display: flex;

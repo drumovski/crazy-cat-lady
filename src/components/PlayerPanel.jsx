@@ -2,6 +2,7 @@ import Card from "./Card.jsx";
 
 export default function PlayerPanel({
   player,
+  isAi,
   isActive,
   isCurrentTurn,
   onCardClick,
@@ -22,6 +23,7 @@ export default function PlayerPanel({
     >
       <h3>
         Player {player.id + 1}
+        {isAi ? " 🤖" : ""}
         {isCurrentTurn ? " (current turn)" : ""}
       </h3>
       <div className="player-score">{player.cats.length} cats · {points} pts</div>
