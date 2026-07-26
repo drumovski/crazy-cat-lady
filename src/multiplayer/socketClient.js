@@ -14,20 +14,20 @@ function getSocket() {
   return socket;
 }
 
-export function createRoom(numPlayers, numAiOpponents, name) {
+export function createRoom(numPlayers, numAiOpponents, name, roomName) {
   return new Promise(resolve => {
-    getSocket().emit("createRoom", { numPlayers, numAiOpponents, name }, resolve);
+    getSocket().emit("createRoom", { numPlayers, numAiOpponents, name, roomName }, resolve);
   });
 }
 
-export function joinRoom(roomCode, name) {
+export function joinRoom(roomName, name) {
   return new Promise(resolve => {
-    getSocket().emit("joinRoom", { roomCode, name }, resolve);
+    getSocket().emit("joinRoom", { roomName, name }, resolve);
   });
 }
 
-export function sendGameAction(roomCode, type, args) {
-  getSocket().emit("gameAction", { roomCode, type, args });
+export function sendGameAction(roomName, type, args) {
+  getSocket().emit("gameAction", { roomName, type, args });
 }
 
 export function onRoomState(handler) {

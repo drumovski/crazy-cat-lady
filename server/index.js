@@ -10,8 +10,8 @@ const io = new Server(httpServer, {
 });
 
 function broadcastRoom(room) {
-  io.to(room.roomCode).emit("roomState", {
-    roomCode: room.roomCode,
+  io.to(room.roomName).emit("roomState", {
+    roomName: room.roomName,
     status: room.status,
     numPlayers: room.numPlayers,
     aiPlayerIds: room.aiPlayerIds,
@@ -22,34 +22,37 @@ function broadcastRoom(room) {
 }
 
 io.on("connection", socket => {
-  socket.on("createRoom", ({ numPlayers, numAiOpponents, name }, callback) => {
-    const { room, playerId, error } = createRoom({ numPlayers, numAiOpponents, socketId: socket.id, name });
+  socket.on("createRoom", ({ numPlayers, numAiOpponents, name, roomName }, callback) => {
+    const { room, playerId, error } = createRoom({ numPlayers, numAiOpponents, socketId: socket.id, name, roomName });
     if (error) {
       callback({ error });
       return;
     }
 
-    socket.join(room.roomCode);
-    callback({ roomCode: room.roomCode, playerId });
+    // Join using the room's own canonical casing, not whatever the client
+    // sent — otherwise a client typing different casing than the room's
+    // stored name would end up in a different Socket.IO room entirely.
+    socket.join(room.roomName);
+    callback({ roomName: room.roomName, playerId });
     broadcastRoom(room);
     scheduleAiIfNeeded(room, () => broadcastRoom(room));
   });
 
-  socket.on("joinRoom", ({ roomCode, name }, callback) => {
-    const result = joinRoom(roomCode, socket.id, name);
+  socket.on("joinRoom", ({ roomName, name }, callback) => {
+    const result = joinRoom(roomName, socket.id, name);
     if (result.error) {
       callback({ error: result.error });
       return;
     }
 
-    socket.join(roomCode);
-    callback({ roomCode, playerId: result.playerId });
+    socket.join(result.room.roomName);
+    callback({ roomName: result.room.roomName, playerId: result.playerId });
     broadcastRoom(result.room);
     scheduleAiIfNeeded(result.room, () => broadcastRoom(result.room));
   });
 
-  socket.on("gameAction", ({ roomCode, type, args }) => {
-    const room = getRoom(roomCode);
+  socket.on("gameAction", ({ roomName, type, args }) => {
+    const room = getRoom(roomName);
     if (!room || !room.game) {
       return;
     }

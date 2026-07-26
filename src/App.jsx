@@ -31,7 +31,7 @@ export default function App() {
   const [playerNames, setPlayerNames] = useState([]);
 
   // Online state
-  const [onlineSession, setOnlineSession] = useState(null); // { roomCode, playerId }
+  const [onlineSession, setOnlineSession] = useState(null); // { roomName, playerId }
   const [roomState, setRoomState] = useState(null); // latest payload from the server
 
   function applyAction(actionFn, ...args) {
@@ -79,7 +79,7 @@ export default function App() {
       return undefined;
     }
     return onRoomState(state => {
-      if (state.roomCode === onlineSession.roomCode) {
+      if (state.roomName === onlineSession.roomName) {
         setRoomState(state);
       }
     });
@@ -89,8 +89,8 @@ export default function App() {
   // waiting for a fresh subscription below to catch a future broadcast (the
   // "playing" transition is a one-time event that would otherwise be missed
   // in the gap before that effect runs).
-  function handleOnlineReady({ roomCode, playerId, initialState }) {
-    setOnlineSession({ roomCode, playerId });
+  function handleOnlineReady({ roomName, playerId, initialState }) {
+    setOnlineSession({ roomName, playerId });
     setRoomState(initialState);
   }
 
@@ -149,8 +149,8 @@ export default function App() {
     return <OnlineSetup onReady={handleOnlineReady} onBack={backToMenu} />;
   }
 
-  const { roomCode, playerId: myPlayerId } = onlineSession;
-  const dispatch = (type, args) => sendGameAction(roomCode, type, args);
+  const { roomName, playerId: myPlayerId } = onlineSession;
+  const dispatch = (type, args) => sendGameAction(roomName, type, args);
 
   return (
     <GameBoard

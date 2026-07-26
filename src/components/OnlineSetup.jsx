@@ -1,49 +1,57 @@
 import { useEffect, useState } from "react";
 import { createRoom, joinRoom, onRoomState } from "../multiplayer/socketClient.js";
 
+const ROOM_NAME_MIN_LENGTH = 4;
+const ROOM_NAME_MAX_LENGTH = 16;
+
 export default function OnlineSetup({ onReady, onBack }) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
   const [numAiOpponents, setNumAiOpponents] = useState(0);
   const [playerName, setPlayerName] = useState("");
-  const [joinCode, setJoinCode] = useState("");
+  const [roomNameInput, setRoomNameInput] = useState("");
+  const [joinRoomName, setJoinRoomName] = useState("");
   const [error, setError] = useState(null);
-  const [room, setRoom] = useState(null); // { roomCode, playerId } once created/joined
+  const [room, setRoom] = useState(null); // { roomName, playerId } once created/joined
 
   useEffect(() => {
     if (!room) return undefined;
 
     return onRoomState(state => {
-      if (state.roomCode !== room.roomCode) return;
+      if (state.roomName !== room.roomName) return;
       if (state.status === "playing") {
         // Pass the state we already received along with the session — if we
-        // only passed {roomCode, playerId} and made the parent start a fresh
+        // only passed {roomName, playerId} and made the parent start a fresh
         // subscription, it would miss this same one-time "playing" broadcast
         // (it fires as part of this same event, before the parent's own
         // subscription effect has a chance to run).
-        onReady({ roomCode: room.roomCode, playerId: room.playerId, initialState: state });
+        onReady({ roomName: room.roomName, playerId: room.playerId, initialState: state });
       }
     });
   }, [room, onReady]);
 
+  const trimmedRoomNameInput = roomNameInput.trim();
+  const isRoomNameValid =
+    trimmedRoomNameInput.length >= ROOM_NAME_MIN_LENGTH && trimmedRoomNameInput.length <= ROOM_NAME_MAX_LENGTH;
+
   async function handleCreate() {
     setError(null);
-    const result = await createRoom(numPlayers, numAiOpponents, playerName);
+    const result = await createRoom(numPlayers, numAiOpponents, playerName, roomNameInput);
     if (result.error) {
       setError(result.error);
       return;
     }
-    setRoom({ roomCode: result.roomCode, playerId: result.playerId });
+    setRoom({ roomName: result.roomName, playerId: result.playerId });
   }
 
   async function handleJoin() {
     setError(null);
-    const result = await joinRoom(joinCode.trim().toUpperCase(), playerName);
+    const result = await joinRoom(joinRoomName, playerName);
     if (result.error) {
       setError(result.error);
       return;
     }
-    setRoom({ roomCode: result.roomCode, playerId: result.playerId });
+    setRoom({ roomName: result.roomName, playerId: result.playerId });
   }
 
   if (room) {
@@ -51,8 +59,8 @@ export default function OnlineSetup({ onReady, onBack }) {
       <div className="setup-screen">
         <h1>🐱 Crazy Cat Lady</h1>
         <p>Waiting for other players to join…</p>
-        <div className="room-code">{room.roomCode}</div>
-        <p className="setup-hint">Share this code with the other players.</p>
+        <div className="room-name-display">{room.roomName}</div>
+        <p className="setup-hint">Share this room name with the other players.</p>
         <button type="button" className="secondary-button" onClick={onBack}>
           Cancel
         </button>
@@ -75,6 +83,19 @@ export default function OnlineSetup({ onReady, onBack }) {
           />
         </label>
         <label className="setup-field">
+          Room name
+          <input
+            className="room-name-input"
+            value={roomNameInput}
+            maxLength={ROOM_NAME_MAX_LENGTH}
+            onChange={e => setRoomNameInput(e.target.value)}
+            placeholder="e.g. Kittens"
+          />
+        </label>
+        <p className="setup-hint">
+          {ROOM_NAME_MIN_LENGTH}-{ROOM_NAME_MAX_LENGTH} characters.
+        </p>
+        <label className="setup-field">
           Total players
           <select value={numPlayers} onChange={e => {
             const n = Number(e.target.value);
@@ -95,7 +116,7 @@ export default function OnlineSetup({ onReady, onBack }) {
           </select>
         </label>
         {error && <p className="setup-error">{error}</p>}
-        <button type="button" className="primary-button" onClick={handleCreate}>
+        <button type="button" className="primary-button" disabled={!isRoomNameValid} onClick={handleCreate}>
           Create Room
         </button>
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>
@@ -120,17 +141,22 @@ export default function OnlineSetup({ onReady, onBack }) {
           />
         </label>
         <label className="setup-field">
-          Room code
+          Room name
           <input
-            className="room-code-input"
-            value={joinCode}
-            maxLength={4}
-            onChange={e => setJoinCode(e.target.value)}
-            placeholder="ABCD"
+            className="room-name-input"
+            value={joinRoomName}
+            maxLength={ROOM_NAME_MAX_LENGTH}
+            onChange={e => setJoinRoomName(e.target.value)}
+            placeholder="e.g. Kittens"
           />
         </label>
         {error && <p className="setup-error">{error}</p>}
-        <button type="button" className="primary-button" disabled={joinCode.trim().length !== 4} onClick={handleJoin}>
+        <button
+          type="button"
+          className="primary-button"
+          disabled={joinRoomName.trim().length < ROOM_NAME_MIN_LENGTH}
+          onClick={handleJoin}
+        >
           Join Room
         </button>
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>

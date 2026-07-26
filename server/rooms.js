@@ -14,18 +14,25 @@ import {
 import { takeAiTurn, pickRandomAiName } from "../src/game/ai.js";
 
 const AI_THINK_DELAY_MS = 700;
+const ROOM_NAME_MIN_LENGTH = 4;
+const ROOM_NAME_MAX_LENGTH = 16;
 
-// Excludes visually-confusable characters (0/O, 1/I).
-const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
+// Keyed by the room name lowercased, so lookups/uniqueness are
+// case-insensitive; each room still remembers the creator's original casing
+// (room.roomName) for display.
 const rooms = new Map();
 
-function generateRoomCode() {
-  let code;
-  do {
-    code = Array.from({ length: 4 }, () => ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)]).join("");
-  } while (rooms.has(code));
-  return code;
+function validateRoomName(roomName) {
+  const trimmed = typeof roomName === "string" ? roomName.trim() : "";
+
+  if (trimmed.length < ROOM_NAME_MIN_LENGTH || trimmed.length > ROOM_NAME_MAX_LENGTH) {
+    return { error: `Room name must be ${ROOM_NAME_MIN_LENGTH}-${ROOM_NAME_MAX_LENGTH} characters.` };
+  }
+  if (rooms.has(trimmed.toLowerCase())) {
+    return { error: "That room name is already in use." };
+  }
+
+  return { roomName: trimmed };
 }
 
 // Maps a client-facing action type to the engine function it calls. playerId
@@ -70,9 +77,14 @@ function assignSeat(room, socketId, name) {
 
 // numAiOpponents seats are always the LAST numAiOpponents seats (e.g. 4
 // players / 2 AI -> seats 2,3 are AI). The creator always gets seat 0.
-export function createRoom({ numPlayers, numAiOpponents, socketId, name }) {
+export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomName }) {
   if (numAiOpponents >= numPlayers) {
     return { error: "Need at least one human seat" };
+  }
+
+  const nameResult = validateRoomName(roomName);
+  if (nameResult.error) {
+    return { error: nameResult.error };
   }
 
   const aiPlayerIds = [];
@@ -85,7 +97,7 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name }) {
   }
 
   const room = {
-    roomCode: generateRoomCode(),
+    roomName: nameResult.roomName,
     numPlayers,
     aiPlayerIds,
     humanSeats,
@@ -103,14 +115,14 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name }) {
     room.playerNames[aiSeat] = aiName;
   }
 
-  rooms.set(room.roomCode, room);
+  rooms.set(room.roomName.toLowerCase(), room);
 
   const seatResult = assignSeat(room, socketId, name);
   return { room, playerId: seatResult.playerId };
 }
 
-export function joinRoom(roomCode, socketId, name) {
-  const room = rooms.get(roomCode);
+export function joinRoom(roomName, socketId, name) {
+  const room = rooms.get(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
   if (!room) {
     return { error: "Room not found" };
   }
@@ -126,8 +138,8 @@ export function joinRoom(roomCode, socketId, name) {
   return { room, playerId: seatResult.playerId };
 }
 
-export function getRoom(roomCode) {
-  return rooms.get(roomCode);
+export function getRoom(roomName) {
+  return rooms.get(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
 }
 
 export function removeSocket(socketId) {
