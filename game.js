@@ -138,9 +138,6 @@ function giveCatToPlayer(game, player, cat) {
 }
 
 function playDog(game, playerId, cardIndex, slotIndex) {
-  const player = game.players[playerId];
-  const card = player.hand[cardIndex];
-
   // Check for a winner
     if (game.winner !== undefined) {
     console.log("Game is already over!");
@@ -157,6 +154,9 @@ function playDog(game, playerId, cardIndex, slotIndex) {
     console.log("Another action is still awaiting a response!");
     return game;
   }
+
+  const player = game.players[playerId];
+  const card = player.hand[cardIndex];
 
   if (!card || card.type !== "dog") {
     console.log("That's not a Dog!");
@@ -1017,3 +1017,14 @@ function testInvalidCardIndexIsRejected() {
 }
 
 testInvalidCardIndexIsRejected();
+
+function testPlayDogRejectsInvalidPlayerIdWithoutCrashing() {
+  const game = createGame(2);
+  const currentPlayerBefore = game.currentPlayerIndex;
+
+  playDog(game, 99, 0, 0); // playerId 99 doesn't exist — shouldn't throw
+
+  console.log("Invalid playerId in playDog rejected — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
+}
+
+testPlayDogRejectsInvalidPlayerIdWithoutCrashing();
