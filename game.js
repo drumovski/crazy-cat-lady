@@ -466,6 +466,79 @@ function discardCard(game, playerId, cardIndex) {
   return game;
 }
 
+// A math discard is valid if every card is a Number card, and either:
+//  - exactly two cards share the same value (a matching pair), or
+//  - three or more cards where the largest value equals the sum of the rest
+function isValidMathDiscard(cards) {
+  if (cards.length < 2 || !cards.every(c => c.type === "number")) {
+    return false;
+  }
+
+  if (cards.length === 2) {
+    return cards[0].value === cards[1].value;
+  }
+
+  const sorted = [...cards].sort((a, b) => a.value - b.value);
+  const largest = sorted[sorted.length - 1].value;
+  const sumOfRest = sorted.slice(0, -1).reduce((sum, c) => sum + c.value, 0);
+
+  return largest === sumOfRest;
+}
+
+// Discard a matching pair (e.g. two 5s) or an addition set (e.g. 2 + 5 = 7)
+// of Number cards in one go, drawing a replacement for each card discarded.
+function discardMathSet(game, playerId, cardIndices) {
+  if (game.winner !== undefined) {
+    console.log("Game is already over!");
+    return game;
+  }
+
+  if (playerId !== game.currentPlayerIndex) {
+    console.log("It's not your turn!");
+    return game;
+  }
+
+  if (game.pendingAction) {
+    console.log("Another action is still awaiting a response!");
+    return game;
+  }
+
+  const player = game.players[playerId];
+  const uniqueIndices = [...new Set(cardIndices)];
+
+  if (uniqueIndices.length !== cardIndices.length) {
+    console.log("Duplicate card indices in math discard!");
+    return game;
+  }
+
+  const cards = uniqueIndices.map(i => player.hand[i]);
+
+  if (cards.some(c => c === undefined)) {
+    console.log("Invalid card index in math discard!");
+    return game;
+  }
+
+  if (!isValidMathDiscard(cards)) {
+    console.log("That's not a valid matching pair or addition set!");
+    return game;
+  }
+
+  // Remove from the hand highest-index-first so earlier indices stay valid
+  const sortedIndices = [...uniqueIndices].sort((a, b) => b - a);
+  for (const index of sortedIndices) {
+    const [card] = player.hand.splice(index, 1);
+    game.discardPile.push(card);
+  }
+
+  for (let i = 0; i < cards.length; i++) {
+    drawCard(game, player);
+  }
+
+  advanceTurn(game);
+
+  return game;
+}
+
 
 
 
@@ -646,3 +719,61 @@ function testDeckReshuffle() {
 }
 
 testDeckReshuffle();
+
+function testMathDiscardPair() {
+  const game = createGame(2);
+
+  game.players[0].hand = [
+    { type: "number", value: 5 },
+    { type: "number", value: 5 },
+    { type: "dog" }
+  ];
+  const handSizeBefore = game.players[0].hand.length;
+
+  discardMathSet(game, 0, [0, 1]); // discard the matching pair of 5s
+
+  console.log("Pair discard — cards removed, replacements drawn (hand size unchanged):", game.players[0].hand.length === handSizeBefore);
+  console.log("Pair discard — discard pile got 2 cards:", game.discardPile.length === 2);
+  console.log("Current player (should be 1):", game.currentPlayerIndex);
+}
+
+testMathDiscardPair();
+
+function testMathDiscardAddition() {
+  const game = createGame(2);
+
+  game.players[0].hand = [
+    { type: "number", value: 2 },
+    { type: "number", value: 5 },
+    { type: "number", value: 7 },
+    { type: "dog" }
+  ];
+  const handSizeBefore = game.players[0].hand.length;
+
+  discardMathSet(game, 0, [0, 1, 2]); // 2 + 5 = 7
+
+  console.log("Addition discard — hand size unchanged:", game.players[0].hand.length === handSizeBefore);
+  console.log("Addition discard — discard pile got 3 cards:", game.discardPile.length === 3);
+  console.log("Current player (should be 1):", game.currentPlayerIndex);
+}
+
+testMathDiscardAddition();
+
+function testMathDiscardRejectsInvalidSet() {
+  const game = createGame(2);
+
+  game.players[0].hand = [
+    { type: "number", value: 2 },
+    { type: "number", value: 3 },
+    { type: "number", value: 7 }
+  ];
+  const handSizeBefore = game.players[0].hand.length;
+  const currentPlayerBefore = game.currentPlayerIndex;
+
+  discardMathSet(game, 0, [0, 1, 2]); // 2 + 3 != 7 — invalid
+
+  console.log("Invalid set rejected — hand untouched:", game.players[0].hand.length === handSizeBefore);
+  console.log("Invalid set rejected — turn did not advance:", game.currentPlayerIndex === currentPlayerBefore);
+}
+
+testMathDiscardRejectsInvalidSet();
