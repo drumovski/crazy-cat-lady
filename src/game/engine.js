@@ -430,14 +430,16 @@ const CARD_TYPE_LABELS = {
 };
 
 // Shared end-of-turn bookkeeping: clear any pending state, check for a
-// winner, and advance the turn if the game isn't over. `message` is a short
-// player-facing description of what just happened (e.g. for actions with no
-// other visible effect) — it's cleared by default so stale messages don't
-// linger past the next action.
-export function finishTurn(game, message = null) {
+// winner, and advance the turn if the game isn't over. `lastMessage` is a
+// short player-facing description of what just happened to a specific
+// player's hand (e.g. for actions with no other visible effect), tagged with
+// whose it is ({ playerId, text }) so the UI can show it only to them rather
+// than to whoever's turn it is by the time it renders — it's cleared by
+// default so stale messages don't linger past the next action.
+export function finishTurn(game, lastMessage = null) {
   game.pendingAction = null;
   game.pendingWakeChoice = null;
-  game.lastMessage = message;
+  game.lastMessage = lastMessage;
 
   const winnerId = checkWinner(game);
   if (winnerId !== null) {
@@ -474,7 +476,7 @@ export function playLaserPointer(game, playerId, cardIndex) {
   if (revealedCard === undefined) {
     // Nothing left to reveal — just draw back up if possible.
     drawCard(game, player);
-    finishTurn(game, "No cards left to reveal.");
+    finishTurn(game, { playerId, text: "No cards left to reveal." });
     return game;
   } else if (revealedCard.type === "number") {
     game.discardPile.push(revealedCard);
@@ -491,14 +493,17 @@ export function playLaserPointer(game, playerId, cardIndex) {
       return game; // wait for respondToWakeChoice — turn does not advance yet
     }
 
-    finishTurn(game, `Revealed a number card, but no sleeping cats are left to wake.`);
+    finishTurn(game, { playerId, text: "Revealed a number card, but no sleeping cats are left to wake." });
     return game;
   }
 
   // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
   // as their replacement draw.
   player.hand.push(revealedCard);
-  finishTurn(game, `Laser Pointer revealed a ${CARD_TYPE_LABELS[revealedCard.type]} — added to your hand.`);
+  finishTurn(game, {
+    playerId,
+    text: `Laser Pointer revealed a ${CARD_TYPE_LABELS[revealedCard.type]} — added to your hand.`
+  });
 
   return game;
 }

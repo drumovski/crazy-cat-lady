@@ -209,9 +209,12 @@ export default function GameBoard({
         </div>
       )}
 
-      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && game.lastMessage && (
-        <div className="banner">{game.lastMessage}</div>
-      )}
+      {!game.pendingAction &&
+        !game.pendingWakeChoice &&
+        game.lastMessage &&
+        (myPlayerId === undefined || myPlayerId === game.lastMessage.playerId) && (
+          <div className="banner">{game.lastMessage.text}</div>
+        )}
 
       <div className="players-row">
         {game.players.map(player => {
