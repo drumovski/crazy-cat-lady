@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PlayerPanel from "./PlayerPanel.jsx";
+import Card from "./Card.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
-import { isValidMathDiscard } from "../game/engine.js";
+import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
 
-// selection.mode drives what a click on a card/opponent/cat/slot means next:
+// selection.mode drives what a click on a card/cat/slot means next:
 //   'dog'          -> next: click a sleeping slot to wake
-//   'fish-target'  -> next: click an opponent
-//   'fish-cat'     -> next: click one of that opponent's cats to steal
-//   'catnip-target'-> next: click an opponent
-//   'catnip-cat'   -> next: click one of that opponent's cats to put to sleep
+//   'fish-target'  -> next: click any opponent's cat directly to steal it
+//   'catnip-target'-> next: click any opponent's cat directly to put it to sleep
+// Re-clicking the originally-selected hand card cancels out of any mode.
 const EMPTY_SELECTION = {};
+const BLOCK_TIMER_SECONDS = 5;
 
 const CARD_TYPE_LABELS = {
   dog: "Dog",
@@ -57,9 +58,73 @@ function formatLastMessage(message, getName, isSelf) {
       return isSelf
         ? `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`
         : `${who}'s Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to ${ownPossessive} hand.`;
+    case "laserWakeChoice":
+      return `${who} played Laser Pointer — the count landed on ${getName(message.targetId)}, who may wake a sleeping cat!`;
+    case "wokeCat":
+      return `${who} woke ${message.catName}!`;
+    case "wokeCatConflict":
+      return `${who} tried to wake ${message.catName}, but already had a matching cat — it went back to sleep.`;
+    case "discarded":
+      return `${who} discarded ${message.count} card${message.count === 1 ? "" : "s"}.`;
+    case "pendingActionAnnounce": {
+      const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
+      const counterLabel = message.cardType === "fish" ? "Seagull" : "Snail";
+      const verb = message.cardType === "fish" ? "steal" : "put to sleep";
+      const hasVerb = isSelf ? "have" : "has";
+      return `${getName(message.attackerId)} played ${cardLabel} to ${verb} ${subjectPossessive} ${message.catName}! ${who} ${hasVerb} ${BLOCK_TIMER_SECONDS} seconds to block with a ${counterLabel}!`;
+    }
     default:
       return "";
   }
+}
+
+// Fanned hand geometry — spreads N cards around a center card, matching the
+// design's 5-card arc (rotation ±10°, ±5°, 0°, arc lift 8/2/0px) generalized
+// to any hand size instead of hardcoding exactly 5 positions.
+function getFanStyle(index, total) {
+  const mid = (total - 1) / 2;
+  const distance = index - mid;
+  const rotate = total > 1 ? Math.max(-25, Math.min(25, distance * 5)) : 0;
+  const arcLift = 2 * distance * distance;
+  const marginLeft = index === 0 ? 0 : -16;
+  return { transform: `rotate(${rotate}deg) translateY(${arcLift}px)`, marginLeft };
+}
+
+function HelpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4" />
+      <circle cx="12" cy="17.5" r="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 0 1 15.5-6.3M21 12a9 9 0 0 1-15.5 6.3" />
+      <path d="M18 3v4h-4M6 21v-4h4" />
+    </svg>
+  );
+}
+
+function CatEarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8 L7 3 L9 8" />
+      <path d="M20 8 L17 3 L15 8" />
+      <path d="M4 8 C4 15 8 19 12 19 C16 19 20 15 20 8 C20 8 16 10 12 10 C8 10 4 8 4 8 Z" />
+    </svg>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 0 1-10 0V4Z" />
+      <path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.5 4 4 4.3M17 5h3a1 1 0 0 1 1 1c0 2.5-1.5 4-4 4.3" />
+    </svg>
+  );
 }
 
 export default function GameBoard({
@@ -79,12 +144,20 @@ export default function GameBoard({
 }) {
   const [selection, setSelection] = useState(EMPTY_SELECTION);
   const [discardSelection, setDiscardSelection] = useState([]);
+  const [showHelp, setShowHelp] = useState(false);
+  // Rolling log of the last 3 events (most recent first). The engine only
+  // ever exposes the single most recent `lastMessage` (and clears it on the
+  // next ordinary turn), so the history has to be accumulated client-side.
+  const [messageHistory, setMessageHistory] = useState([]);
+
+  // Seconds left to block, or null when no pending action is awaiting a
+  // response. Keyed off the pending action's *content* rather than object
+  // identity — in online mode every broadcast re-serializes the game state
+  // into fresh object references, so identity alone would restart the
+  // countdown on unrelated updates.
+  const [blockTimeLeft, setBlockTimeLeft] = useState(null);
 
   const getName = id => playerNames[id] || `Player ${id + 1}`;
-
-  if (game.winner !== undefined) {
-    return <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />;
-  }
 
   const activePlayerId = game.pendingAction
     ? game.pendingAction.targetId
@@ -102,6 +175,49 @@ export default function GameBoard({
   // can only act when it's genuinely that seat's turn/decision.
   const revealSeat = isOnline ? myPlayerId : activePlayerId;
   const canInteract = isOnline ? activePlayerId === myPlayerId : !isAiDecision;
+  const revealedPlayer = game.players[revealSeat];
+
+  useEffect(() => {
+    if (!game.lastMessage) return;
+    const isSelf = myPlayerId === game.lastMessage.playerId;
+    const text = formatLastMessage(game.lastMessage, getName, isSelf);
+    setMessageHistory(prev => (prev[0] === text ? prev : [text, ...prev].slice(0, 3)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.lastMessage]);
+
+  // Keyed off the pending action's *content* rather than object identity —
+  // in online mode every broadcast re-serializes the game state into fresh
+  // object references, so identity alone would restart the countdown on
+  // unrelated updates.
+  const pendingActionKey = game.pendingAction
+    ? `${game.pendingAction.type}-${game.pendingAction.attackerId}-${game.pendingAction.targetId}-${game.pendingAction.catIndex}`
+    : null;
+
+  useEffect(() => {
+    if (!pendingActionKey) {
+      setBlockTimeLeft(null);
+      return undefined;
+    }
+    setBlockTimeLeft(BLOCK_TIMER_SECONDS);
+    const interval = setInterval(() => {
+      setBlockTimeLeft(prev => (prev === null ? null : Math.max(0, prev - 1)));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [pendingActionKey]);
+
+  // Everyone watching (local hotseat's shared screen, or any online client)
+  // sees the countdown, but only the actual target's own client drives the
+  // timeout into a real "no block" response, so it's submitted exactly once.
+  useEffect(() => {
+    if (blockTimeLeft === 0 && canInteract && game.pendingAction) {
+      onRespondToPendingAction(game.pendingAction.targetId, null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockTimeLeft, canInteract]);
+
+  if (game.winner !== undefined) {
+    return <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />;
+  }
 
   function resetSelection() {
     setSelection(EMPTY_SELECTION);
@@ -125,9 +241,12 @@ export default function GameBoard({
       return;
     }
 
-    // Mid-flow choosing a target/slot/cat for Dog/Fish/Catnip — further hand
-    // clicks are ignored; use Cancel or "Discard This Card Instead" below.
+    // Mid-flow choosing a slot/cat for Dog/Fish/Catnip — re-clicking the same
+    // card cancels the selection; clicking any other hand card is ignored.
     if (selection.mode) {
+      if (selection.cardIndex === cardIndex) {
+        resetSelection();
+      }
       return;
     }
 
@@ -161,19 +280,14 @@ export default function GameBoard({
     }
   }
 
-  function handlePlayerPanelClick(targetPlayerId) {
-    if (selection.mode === "fish-target") {
-      setSelection({ ...selection, mode: "fish-cat", targetPlayerId });
-    } else if (selection.mode === "catnip-target") {
-      setSelection({ ...selection, mode: "catnip-cat", targetPlayerId });
-    }
-  }
-
+  // Both Fish and Catnip skip straight to clicking the cat itself — that one
+  // click identifies both the target player and which cat, no separate
+  // player-selection step needed.
   function handleCatClick(targetPlayerId, catIndex) {
-    if (selection.mode === "fish-cat" && selection.targetPlayerId === targetPlayerId) {
+    if (selection.mode === "fish-target") {
       onPlayFish(activePlayerId, selection.cardIndex, targetPlayerId, catIndex);
       resetSelection();
-    } else if (selection.mode === "catnip-cat" && selection.targetPlayerId === targetPlayerId) {
+    } else if (selection.mode === "catnip-target") {
       onPlayCatnip(activePlayerId, selection.cardIndex, targetPlayerId, catIndex);
       resetSelection();
     }
@@ -183,13 +297,6 @@ export default function GameBoard({
     onDiscard(activePlayerId, selection.cardIndex);
     resetSelection();
   }
-
-  const isPanelSelectableForFish =
-    selection.mode === "fish-target" &&
-    (id => id !== activePlayerId && game.players[id].cats.length > 0);
-  const isPanelSelectableForCatnipTarget =
-    selection.mode === "catnip-target" &&
-    (id => id !== activePlayerId && game.players[id].cats.length > 0);
 
   const sleepingSelectable = Boolean(game.pendingWakeChoice) || selection.mode === "dog";
 
@@ -207,155 +314,177 @@ export default function GameBoard({
     resetSelection();
   }
 
+  const thresholds = getWinThresholds(game.players.length);
+  const topDiscard = game.discardPile[game.discardPile.length - 1];
+  const opponents = game.players.filter(p => p.id !== revealSeat);
+
+  // The discard pile doubles as the "confirm discard" target: with a
+  // Dog/Fish/Catnip card selected, clicking it discards that card instead of
+  // playing it; otherwise, with Number/Seagull/Snail cards selected, it
+  // discards that selection (single card, or a valid matching pair/sum).
+  const canDiscardViaPile =
+    canInteract &&
+    !game.pendingAction &&
+    !game.pendingWakeChoice &&
+    (selection.mode ? true : discardSelection.length > 0 && canConfirmDiscard);
+
+  function handleDiscardPileClick() {
+    if (selection.mode) {
+      discardSelectedCardInstead();
+    } else {
+      confirmDiscard();
+    }
+  }
+
+  // While a Fish/Catnip is pending against the viewer, their matching
+  // counter card (Seagull/Snail) is highlighted as clickable-to-block.
+  const blockCounterType =
+    game.pendingAction && canInteract ? (game.pendingAction.type === "fish" ? "seagull" : "snail") : null;
+
   return (
     <div className="game-board">
       <div className="board-header">
-        <h2>🐱 Crazy Cat Lady</h2>
-        <div className="board-info">
-          Deck: {game.deck.length} · Discard: {game.discardPile.length}
+        <button type="button" className="icon-button" onClick={() => setShowHelp(v => !v)} title="Help">
+          <HelpIcon />
+        </button>
+        <div className="room-pill">
+          <CatEarIcon />
+          <span>Crazy Cat Lady</span>
         </div>
-        <button type="button" className="secondary-button" onClick={onNewGame}>
-          New Game
+        <button type="button" className="icon-button" onClick={onNewGame} title="New Game">
+          <RefreshIcon />
         </button>
       </div>
 
-      {!canInteract && !game.pendingAction && !game.pendingWakeChoice && (
-        <div className="banner">
-          {isAiDecision
-            ? `🤖 ${getName(activePlayerId)} is thinking…`
-            : `Waiting for ${getName(activePlayerId)}…`}
-        </div>
-      )}
-
-      {game.pendingAction && (() => {
-        const action = game.pendingAction;
-        const cat = game.players[action.targetId].cats[action.catIndex];
-        const cardLabel = action.type === "fish" ? "Fish" : "Catnip";
-        const counterType = action.type === "fish" ? "Seagull" : "Snail";
-        const verb = action.type === "fish" ? "steal" : "put to sleep";
-        return (
-          <div className="banner">
-            {getName(action.attackerId)} played {cardLabel} to {verb} {getName(action.targetId)}'s{" "}
-            {cat.name}! {getName(action.targetId)} may block with a {counterType}, or let it happen.
-            {canInteract && (
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => onRespondToPendingAction(action.targetId, null)}
-              >
-                Don't Block
-              </button>
-            )}
-          </div>
-        );
-      })()}
-
-      {game.pendingWakeChoice && (
-        <div className="banner">
-          {game.pendingWakeChoice.actorId === game.pendingWakeChoice.playerId
-            ? `${getName(game.pendingWakeChoice.playerId)} gets to wake a bonus sleeping cat!`
-            : `${getName(game.pendingWakeChoice.actorId)} played Laser Pointer — the count landed on ${getName(
-                game.pendingWakeChoice.playerId
-              )}, who may wake a sleeping cat!`}
-        </div>
-      )}
-
-      {canInteract && !game.pendingAction && !game.pendingWakeChoice && selection.mode && (
-        <div className="banner">
-          {selection.mode === "dog" && "Choose a sleeping cat slot to wake."}
-          {selection.mode === "fish-target" && "Choose an opponent to steal a cat from."}
-          {selection.mode === "fish-cat" && "Choose which of their cats to steal."}
-          {selection.mode === "catnip-target" && "Choose an opponent to send a cat back to sleep."}
-          {selection.mode === "catnip-cat" && "Choose which of their cats to put to sleep."}
-          <button type="button" className="secondary-button" onClick={discardSelectedCardInstead}>
-            Discard This Card Instead
-          </button>
-          <button type="button" className="secondary-button" onClick={resetSelection}>
-            Cancel
+      {showHelp && (
+        <div className="help-popover">
+          <p>
+            Play a <strong>Dog</strong> to wake a sleeping cat, a <strong>Fish</strong> to steal one, or{" "}
+            <strong>Catnip</strong> to put one back to sleep. <strong>Laser Pointer</strong> reveals the top
+            card. Otherwise discard a Number/Seagull/Snail card — or a matching pair/sum of Number cards for
+            extra draws.
+          </p>
+          <button type="button" className="secondary-button" onClick={() => setShowHelp(false)}>
+            Got it
           </button>
         </div>
       )}
 
-      {!game.pendingAction &&
-        !game.pendingWakeChoice &&
-        game.lastMessage &&
-        (myPlayerId === undefined || myPlayerId === game.lastMessage.playerId) && (
-          <div className="banner">
-            {formatLastMessage(game.lastMessage, getName, myPlayerId === game.lastMessage.playerId)}
+      <div className="win-pill">
+        <TrophyIcon />
+        <span>
+          Win condition: {thresholds.cats} Cats or {thresholds.points} points
+        </span>
+      </div>
+
+      <div className="opponents-row">
+        {opponents.map(player => (
+          <PlayerPanel
+            key={player.id}
+            player={player}
+            name={getName(player.id)}
+            isAi={aiPlayerIds.includes(player.id)}
+            isCurrentTurn={player.id === game.currentPlayerIndex}
+            catsSelectable={
+              canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
+            }
+            onCatClick={catIndex => handleCatClick(player.id, catIndex)}
+          />
+        ))}
+      </div>
+
+      <div className="center-board">
+        {game.pendingAction && blockTimeLeft !== null && (
+          <div className="block-timer-overlay">
+            <span className="block-timer-number">{blockTimeLeft}</span>
           </div>
         )}
 
-      <div className="players-row">
-        {game.players.map(player => {
-          const isRevealed = player.id === revealSeat;
-          const isInteractive = isRevealed && canInteract;
-          const selectedCardIndices = isInteractive
-            ? selection.cardIndex !== undefined
-              ? [selection.cardIndex]
-              : discardSelection
-            : [];
-
-          return (
-            <PlayerPanel
-              key={player.id}
-              player={player}
-              name={getName(player.id)}
-              isAi={aiPlayerIds.includes(player.id)}
-              isActive={isRevealed}
-              isCurrentTurn={player.id === game.currentPlayerIndex}
-              selectedCardIndices={selectedCardIndices}
-              onCardClick={isInteractive ? handleCardClick : undefined}
-              panelSelectable={
-                canInteract &&
-                ((isPanelSelectableForFish && isPanelSelectableForFish(player.id)) ||
-                  (isPanelSelectableForCatnipTarget && isPanelSelectableForCatnipTarget(player.id)))
-              }
-              onPanelClick={() => handlePlayerPanelClick(player.id)}
-              catsSelectable={
-                canInteract &&
-                (selection.mode === "fish-cat" || selection.mode === "catnip-cat") &&
-                selection.targetPlayerId === player.id
-              }
-              onCatClick={catIndex => handleCatClick(player.id, catIndex)}
-            />
-          );
-        })}
-      </div>
-
-      <div className="sleeping-area">
-        <h3>Sleeping Cats</h3>
         <SleepingCatsGrid
           sleepingCats={game.sleepingCats}
+          startIndex={0}
+          count={6}
+          onSlotClick={handleSlotClick}
+          selectable={canInteract && sleepingSelectable}
+        />
+
+        <div className="pile-column">
+          <div className="pile-group">
+            <div className="card card-size-board card-back" />
+            <span className="pile-label">Draw · {game.deck.length}</span>
+          </div>
+          <div
+            className={`pile-group${canDiscardViaPile ? " pile-group-clickable" : ""}`}
+            onClick={canDiscardViaPile ? handleDiscardPileClick : undefined}
+            role={canDiscardViaPile ? "button" : undefined}
+            tabIndex={canDiscardViaPile ? 0 : undefined}
+          >
+            {topDiscard ? (
+              // A disabled Card (no onClick) silently swallows clicks instead
+              // of letting them bubble to the pile-group's handler above, so
+              // it needs its own (no-op) onClick to stay non-disabled and
+              // let clicking the card itself trigger the discard too.
+              <Card card={topDiscard} size="board" onClick={canDiscardViaPile ? () => {} : undefined} />
+            ) : (
+              <div className="card card-size-board sleeping-slot-empty" />
+            )}
+            <span className="pile-label">Discard · {game.discardPile.length}</span>
+          </div>
+        </div>
+
+        <SleepingCatsGrid
+          sleepingCats={game.sleepingCats}
+          startIndex={6}
+          count={6}
           onSlotClick={handleSlotClick}
           selectable={canInteract && sleepingSelectable}
         />
       </div>
 
-      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length > 0 && (
-        <div className="discard-controls">
-          <button
-            type="button"
-            className="primary-button"
-            onClick={confirmDiscard}
-            disabled={!canConfirmDiscard}
-          >
-            Discard Selected ({discardSelection.length})
-          </button>
-          <button type="button" className="secondary-button" onClick={resetSelection}>
-            Clear
-          </button>
-          {discardIsMathSet && !canConfirmDiscard && (
-            <span className="discard-hint">Not a matching pair or a valid sum.</span>
-          )}
+      <div className="your-cats-panel">
+        <span className="your-cats-label">
+          {isOnline ? "Your Cats" : `${getName(revealSeat)}'s Cats`}
+        </span>
+        <div className="your-cats-row">
+          {revealedPlayer.cats.map(cat => (
+            <Card key={cat.id} card={cat} size="hand" />
+          ))}
+          {revealedPlayer.cats.length === 0 && <span className="your-cats-empty">No cats yet</span>}
         </div>
-      )}
+      </div>
 
-      {canInteract && !game.pendingAction && !game.pendingWakeChoice && !selection.mode && discardSelection.length === 0 && (
-        <p className="discard-hint">
-          Click a Number/Seagull/Snail card to select it for discard — select 2+ Number cards for a
-          matching pair or sum.
-        </p>
-      )}
+      <div className="message-log">
+        {messageHistory.length === 0 ? (
+          <span className="message-log-empty">No moves yet.</span>
+        ) : (
+          messageHistory.map((text, i) => (
+            <div className="message-log-row" key={i}>
+              <span className="message-log-emoji">🐱</span>
+              <span className="message-log-text">{text}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="hand-fan">
+        {revealedPlayer.hand.map((card, cardIndex) => {
+          const isInteractive = canInteract;
+          const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
+          return (
+            <div key={cardIndex} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
+              <div style={{ transform: style.transform }}>
+                <Card
+                  card={card}
+                  size="hand"
+                  selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
+                  eligible={blockCounterType !== null && card.type === blockCounterType}
+                  onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

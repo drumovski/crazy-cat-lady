@@ -18,8 +18,8 @@ export function createDeck() {
     deck.push({ type: "fish" });
   }
 
-  // Add 4 Seagull cards (blocks a Fish steal)
-  for (let i = 0; i < 4; i++) {
+  // Add 3 Seagull cards (blocks a Fish steal)
+  for (let i = 0; i < 3; i++) {
     deck.push({ type: "seagull" });
   }
 
@@ -186,14 +186,18 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
   // Wake the chosen sleeping Cat and give it to the player
   const cat = wakeCatAtSlot(game, slotIndex);
   const joined = giveCatToPlayer(game, player, cat);
+  const wakeMessage = joined
+    ? { playerId, kind: "wokeCat", catName: cat.name }
+    : { playerId, kind: "wokeCatConflict", catName: cat.name };
 
   if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
     game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
+    game.lastMessage = wakeMessage;
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
     return game; // wait for respondToWakeChoice — turn does not advance yet
   }
 
-  finishTurn(game);
+  finishTurn(game, wakeMessage);
 
   return game;
 }
@@ -235,6 +239,13 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
       attackerId: playerId,
       targetId: targetPlayerId,
       catIndex: targetCatIndex
+    };
+    game.lastMessage = {
+      playerId: targetPlayerId,
+      kind: "pendingActionAnnounce",
+      attackerId: playerId,
+      catName: targetPlayer.cats[targetCatIndex].name,
+      cardType: "fish"
     };
     console.log(`Player ${targetPlayerId} may block with a Seagull!`);
     return game; // wait for respondToPendingAction — turn does not advance yet
@@ -283,6 +294,13 @@ export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatI
       attackerId: playerId,
       targetId: targetPlayerId,
       catIndex: targetCatIndex
+    };
+    game.lastMessage = {
+      playerId: targetPlayerId,
+      kind: "pendingActionAnnounce",
+      attackerId: playerId,
+      catName: targetPlayer.cats[targetCatIndex].name,
+      cardType: "catnip"
     };
     console.log(`Player ${targetPlayerId} may block with a Snail!`);
     return game; // wait for respondToPendingAction — turn does not advance yet
@@ -395,15 +413,19 @@ export function respondToWakeChoice(game, playerId, slotIndex) {
   const player = game.players[playerId];
   const cat = wakeCatAtSlot(game, slotIndex);
   const joined = giveCatToPlayer(game, player, cat);
+  const wakeMessage = joined
+    ? { playerId, kind: "wokeCat", catName: cat.name }
+    : { playerId, kind: "wokeCatConflict", catName: cat.name };
 
   if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
     game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
+    game.lastMessage = wakeMessage;
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
     return game; // still pending — pick again
   }
 
   game.pendingWakeChoice = null;
-  finishTurn(game);
+  finishTurn(game, wakeMessage);
 
   return game;
 }
@@ -496,7 +518,7 @@ export function playLaserPointer(game, playerId, cardIndex) {
 
     if (getAvailableSlots(game).length > 0) {
       game.pendingWakeChoice = { playerId: targetIndex, bonus: false, actorId: playerId };
-      game.lastMessage = null;
+      game.lastMessage = { playerId, kind: "laserWakeChoice", targetId: targetIndex };
       console.log(`Player ${targetIndex} may wake a sleeping cat!`);
       return game; // wait for respondToWakeChoice — turn does not advance yet
     }
@@ -614,7 +636,7 @@ export function discardCard(game, playerId, cardIndex) {
   game.discardPile.push(card);
 
   drawCard(game, player);
-  finishTurn(game);
+  finishTurn(game, { playerId, kind: "discarded", count: 1 });
 
   return game;
 }
@@ -676,7 +698,7 @@ export function discardMathSet(game, playerId, cardIndices) {
     drawCard(game, player);
   }
 
-  finishTurn(game);
+  finishTurn(game, { playerId, kind: "discarded", count: cards.length });
 
   return game;
 }
