@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { pickRandomAiName } from "../game/ai.js";
+import { BLOCK_TIMER_MIN, BLOCK_TIMER_MAX, DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
+
+const BLOCK_TIMER_CHOICES = Array.from(
+  { length: BLOCK_TIMER_MAX - BLOCK_TIMER_MIN + 1 },
+  (_, i) => BLOCK_TIMER_MIN + i
+);
 
 export default function SetupScreen({ onStart }) {
   const [numPlayers, setNumPlayers] = useState(2);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
   const [playerNames, setPlayerNames] = useState(["", "", "", "", ""]);
+  const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
 
   function changeNumPlayers(n) {
     setNumPlayers(n);
@@ -35,7 +42,7 @@ export default function SetupScreen({ onStart }) {
       }
       return playerNames[playerId].trim() || `Player ${playerId + 1}`;
     });
-    onStart(numPlayers, aiPlayerIds, finalNames);
+    onStart(numPlayers, aiPlayerIds, finalNames, blockTimerSeconds);
   }
 
   return (
@@ -49,6 +56,19 @@ export default function SetupScreen({ onStart }) {
           {[2, 3, 4, 5].map(n => (
             <option key={n} value={n}>{n}</option>
           ))}
+        </select>
+      </label>
+
+      <label className="setup-field">
+        Block response time
+        <select
+          value={blockTimerSeconds === null ? "never" : blockTimerSeconds}
+          onChange={e => setBlockTimerSeconds(e.target.value === "never" ? null : Number(e.target.value))}
+        >
+          {BLOCK_TIMER_CHOICES.map(n => (
+            <option key={n} value={n}>{n} seconds</option>
+          ))}
+          <option value="never">Never (no limit)</option>
         </select>
       </label>
 

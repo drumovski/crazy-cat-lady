@@ -14,9 +14,9 @@ function getSocket() {
   return socket;
 }
 
-export function createRoom(numPlayers, numAiOpponents, name, roomName) {
+export function createRoom(numPlayers, numAiOpponents, name, roomName, blockTimerSeconds) {
   return new Promise(resolve => {
-    getSocket().emit("createRoom", { numPlayers, numAiOpponents, name, roomName }, resolve);
+    getSocket().emit("createRoom", { numPlayers, numAiOpponents, name, roomName, blockTimerSeconds }, resolve);
   });
 }
 

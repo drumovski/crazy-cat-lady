@@ -9,21 +9,33 @@ const io = new Server(httpServer, {
   cors: { origin: process.env.CLIENT_ORIGIN || "*" }
 });
 
-function broadcastRoom(room) {
-  io.to(room.roomName).emit("roomState", {
+function roomState(room) {
+  return {
     roomName: room.roomName,
     status: room.status,
     numPlayers: room.numPlayers,
     aiPlayerIds: room.aiPlayerIds,
     playerNames: room.playerNames,
+    blockTimerSeconds: room.blockTimerSeconds,
     joinedSeats: [...room.seatToSocket.keys()],
     game: room.game
-  });
+  };
+}
+
+function broadcastRoom(room) {
+  io.to(room.roomName).emit("roomState", roomState(room));
 }
 
 io.on("connection", socket => {
-  socket.on("createRoom", ({ numPlayers, numAiOpponents, name, roomName }, callback) => {
-    const { room, playerId, error } = createRoom({ numPlayers, numAiOpponents, socketId: socket.id, name, roomName });
+  socket.on("createRoom", ({ numPlayers, numAiOpponents, name, roomName, blockTimerSeconds }, callback) => {
+    const { room, playerId, error } = createRoom({
+      numPlayers,
+      numAiOpponents,
+      socketId: socket.id,
+      name,
+      roomName,
+      blockTimerSeconds
+    });
     if (error) {
       callback({ error });
       return;
@@ -33,7 +45,14 @@ io.on("connection", socket => {
     // sent — otherwise a client typing different casing than the room's
     // stored name would end up in a different Socket.IO room entirely.
     socket.join(room.roomName);
-    callback({ roomName: room.roomName, playerId });
+    // The ack carries the full room state (not just roomName/playerId) so
+    // the client can tell right away whether the game already started —
+    // e.g. when this join fills the last seat, `broadcastRoom` below fires
+    // near-simultaneously with this ack, and a client that only starts
+    // listening for "roomState" after processing the ack (a render/effect
+    // later) would otherwise miss that broadcast and be stuck waiting
+    // forever. Handing over the state directly in the ack closes that race.
+    callback({ roomName: room.roomName, playerId, ...roomState(room) });
     broadcastRoom(room);
     scheduleAiIfNeeded(room, () => broadcastRoom(room));
   });
@@ -46,7 +65,7 @@ io.on("connection", socket => {
     }
 
     socket.join(result.room.roomName);
-    callback({ roomName: result.room.roomName, playerId: result.playerId });
+    callback({ roomName: result.room.roomName, playerId: result.playerId, ...roomState(result.room) });
     broadcastRoom(result.room);
     scheduleAiIfNeeded(result.room, () => broadcastRoom(result.room));
   });

@@ -17,13 +17,15 @@ export default function PlayerPanel({ player, name, isAi, isCurrentTurn, onCatCl
 
       <div className="player-cats">
         {player.cats.map((cat, catIndex) => (
-          <Card
-            key={cat.id}
-            card={cat}
-            size="mini"
-            selectable={catsSelectable}
-            onClick={catsSelectable ? () => onCatClick(catIndex) : undefined}
-          />
+          <div key={cat.id} className="mini-cat">
+            <Card
+              card={cat}
+              size="mini"
+              selectable={catsSelectable}
+              onClick={catsSelectable ? () => onCatClick(catIndex) : undefined}
+            />
+            <span className="mini-cat-name">{cat.name}</span>
+          </div>
         ))}
         {player.cats.length === 0 && <span className="player-cats-empty">none</span>}
       </div>

@@ -13,6 +13,7 @@ import {
   respondToWakeChoiceAsAi
 } from "./game/engine.js";
 import { takeAiTurn } from "./game/ai.js";
+import { DEFAULT_BLOCK_TIMER_SECONDS } from "./game/blockTimer.js";
 import { onRoomState, sendGameAction } from "./multiplayer/socketClient.js";
 import ModeSelect from "./components/ModeSelect.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
@@ -29,6 +30,7 @@ export default function App() {
   const [game, setGame] = useState(null);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
   const [playerNames, setPlayerNames] = useState([]);
+  const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
 
   // Online state
   const [onlineSession, setOnlineSession] = useState(null); // { roomName, playerId }
@@ -99,6 +101,7 @@ export default function App() {
     setGame(null);
     setAiPlayerIds([]);
     setPlayerNames([]);
+    setBlockTimerSeconds(DEFAULT_BLOCK_TIMER_SECONDS);
     setOnlineSession(null);
     setRoomState(null);
   }
@@ -111,9 +114,10 @@ export default function App() {
     if (!game) {
       return (
         <SetupScreen
-          onStart={(numPlayers, aiIds, names) => {
+          onStart={(numPlayers, aiIds, names, timerSeconds) => {
             setAiPlayerIds(aiIds);
             setPlayerNames(names);
+            setBlockTimerSeconds(timerSeconds);
             setGame(createGame(numPlayers));
           }}
         />
@@ -125,6 +129,7 @@ export default function App() {
         game={game}
         aiPlayerIds={aiPlayerIds}
         playerNames={playerNames}
+        blockTimerSeconds={blockTimerSeconds}
         onNewGame={backToMenu}
         onPlayDog={(playerId, cardIndex, slotIndex) => applyAction(playDog, playerId, cardIndex, slotIndex)}
         onPlayFish={(playerId, cardIndex, targetPlayerId, targetCatIndex) =>
@@ -158,6 +163,7 @@ export default function App() {
       aiPlayerIds={roomState.aiPlayerIds}
       playerNames={roomState.playerNames}
       myPlayerId={myPlayerId}
+      blockTimerSeconds={roomState.blockTimerSeconds}
       onNewGame={backToMenu}
       onPlayDog={(_playerId, cardIndex, slotIndex) => dispatch("playDog", [cardIndex, slotIndex])}
       onPlayFish={(_playerId, cardIndex, targetPlayerId, targetCatIndex) =>

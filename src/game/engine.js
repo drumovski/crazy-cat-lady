@@ -177,6 +177,12 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
     return game;
   }
 
+  // Reset here (not unconditionally at the top of the function) so a
+  // React StrictMode double-invoke — which re-runs this whole function but
+  // hits validateTurn's already-advanced-turn guard on the second call —
+  // doesn't wipe out the sfxEvents the first, real call already recorded.
+  game.sfxEvents = [];
+
   // Remove the Dog from the player's hand, put it in the discard pile
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
@@ -186,11 +192,15 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
   // Wake the chosen sleeping Cat and give it to the player
   const cat = wakeCatAtSlot(game, slotIndex);
   const joined = giveCatToPlayer(game, player, cat);
-  const wakeMessage = joined
-    ? { playerId, kind: "wokeCat", catName: cat.name }
-    : { playerId, kind: "wokeCatConflict", catName: cat.name };
+  const grantsBonus = joined && cat.wakesBonus && getAvailableSlots(game).length > 0;
+  const wakeMessage = !joined
+    ? { playerId, kind: "wokeCatConflict", catName: cat.name }
+    : grantsBonus
+    ? { playerId, kind: "wokeBonusCat", catName: cat.name }
+    : { playerId, kind: "wokeCat", catName: cat.name };
+  game.sfxEvents.push(joined ? "wakeCat" : "gingerTomBackToSleep");
 
-  if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
+  if (grantsBonus) {
     game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
     game.lastMessage = wakeMessage;
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
@@ -228,6 +238,7 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
     return game;
   }
 
+  game.sfxEvents = ["fish"];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
   drawCard(game, player);
@@ -283,6 +294,7 @@ export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatI
     return game;
   }
 
+  game.sfxEvents = ["catnip"];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
   drawCard(game, player);
@@ -341,6 +353,7 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
       return game;
     }
 
+    game.sfxEvents = [counterType]; // "seagull" or "snail"
     targetPlayer.hand.splice(blockCardIndex, 1);
     game.discardPile.push(blockCard);
     drawCard(game, targetPlayer);
@@ -357,6 +370,7 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
     return game;
   }
 
+  game.sfxEvents = [];
   if (action.type === "fish") {
     resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
     finishTurn(game, { playerId: action.attackerId, kind: "fishStolenConfirm", targetId: targetPlayerId, catName });
@@ -410,14 +424,19 @@ export function respondToWakeChoice(game, playerId, slotIndex) {
     return game;
   }
 
+  game.sfxEvents = [];
   const player = game.players[playerId];
   const cat = wakeCatAtSlot(game, slotIndex);
   const joined = giveCatToPlayer(game, player, cat);
-  const wakeMessage = joined
-    ? { playerId, kind: "wokeCat", catName: cat.name }
-    : { playerId, kind: "wokeCatConflict", catName: cat.name };
+  const grantsBonus = joined && cat.wakesBonus && getAvailableSlots(game).length > 0;
+  const wakeMessage = !joined
+    ? { playerId, kind: "wokeCatConflict", catName: cat.name }
+    : grantsBonus
+    ? { playerId, kind: "wokeBonusCat", catName: cat.name }
+    : { playerId, kind: "wokeCat", catName: cat.name };
+  game.sfxEvents.push(joined ? "wakeCat" : "gingerTomBackToSleep");
 
-  if (joined && cat.wakesBonus && getAvailableSlots(game).length > 0) {
+  if (grantsBonus) {
     game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
     game.lastMessage = wakeMessage;
     console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
@@ -435,6 +454,7 @@ export function respondToWakeChoiceAsAi(game, playerId) {
   const availableSlots = getAvailableSlots(game);
 
   if (availableSlots.length === 0) {
+    game.sfxEvents = [];
     game.pendingWakeChoice = null;
     finishTurn(game);
     return game;
@@ -494,6 +514,7 @@ export function playLaserPointer(game, playerId, cardIndex) {
     return game;
   }
 
+  game.sfxEvents = ["laser"];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
 
@@ -543,6 +564,11 @@ export function drawCard(game, player) {
   if (game.deck.length > 0) {
     const newCard = game.deck.shift();
     player.hand.push(newCard);
+    // Optional chaining: sfxEvents is only initialized by the entry-point
+    // action currently in progress — drawCard is also called from contexts
+    // (e.g. createGame's dealt-hand bookkeeping doesn't go through here) that
+    // don't care about it.
+    game.sfxEvents?.push("dealCard");
   }
 }
 
@@ -555,6 +581,7 @@ export function reshuffleDiscardIntoDeck(game) {
 
   game.deck = shuffleDeck(game.discardPile);
   game.discardPile = [];
+  game.sfxEvents?.push("shuffle");
   console.log("Deck was empty — reshuffled the discard pile into a new deck.");
 }
 
@@ -566,6 +593,13 @@ export function advanceTurn(game) {
 export function createGame(numPlayers) {
   const deck = shuffleDeck(createDeck());
   const { hands, remainingDeck } = dealHands(deck, numPlayers);
+
+  // dealHands slices straight from the shuffled deck rather than going
+  // through drawCard, so it doesn't pick up a "dealCard" sfxEvent per card on
+  // its own — queue the shuffle + one "dealCard" per card dealt here instead,
+  // so the very first thing a new game does is play like a real deal.
+  const totalCardsDealt = hands.reduce((sum, hand) => sum + hand.length, 0);
+  const sfxEvents = ["shuffle", ...Array(totalCardsDealt).fill("dealCard")];
 
   return {
     players: hands.map((hand, index) => ({
@@ -579,7 +613,8 @@ export function createGame(numPlayers) {
     currentPlayerIndex: 0,
     pendingAction: null,
     pendingWakeChoice: null,
-    lastMessage: null
+    lastMessage: null,
+    sfxEvents
   };
 }
 
@@ -632,6 +667,12 @@ export function discardCard(game, playerId, cardIndex) {
     return game;
   }
 
+  if (card.type === "dog") {
+    console.log("Dog cards can't be discarded — they must be played.");
+    return game;
+  }
+
+  game.sfxEvents = [];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
 
@@ -687,6 +728,7 @@ export function discardMathSet(game, playerId, cardIndices) {
     return game;
   }
 
+  game.sfxEvents = [];
   // Remove from the hand highest-index-first so earlier indices stay valid
   const sortedIndices = [...uniqueIndices].sort((a, b) => b - a);
   for (const index of sortedIndices) {

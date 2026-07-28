@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/organic-06fd6022-8f21-4b36-a75a-6a337c8ea023/styles.css">
+  <script src="_ds/organic-06fd6022-8f21-4b36-a75a-6a337c8ea023/_ds_bundle.js"></script>
+  <style>
+    body{margin:0}
+    a{color:var(--color-accent-700)}
+    a:hover{color:var(--color-accent-900)}
+    @keyframes turnGlow{0%,100%{box-shadow:0 0 0 3px var(--color-accent),var(--shadow-md)}50%{box-shadow:0 0 0 6px var(--color-accent-300),var(--shadow-md)}}
+  </style>
+</helmet>
+<div data-screen-label="Game Board (Mobile)" style="width:100%; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#e7e2d8; box-sizing:border-box; padding:24px;">
+  <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{390}}" height="{{844}}" hint-size="390px,844px">
+    <div style="width:100%; min-height:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; padding:64px 12px 36px; font-family:var(--font-body); background:radial-gradient(ellipse at 50% 30%, #2e7d46 0%, #1c5c31 55%, #0f3a1e 100%); box-shadow:inset 0 0 140px rgba(0,0,0,0.45);">
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+        <button class="btn btn-icon" style="width:28px; height:28px; padding:0; flex-shrink:0;" title="Help">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4"></path><circle cx="12" cy="17.5" r="0.6" fill="currentColor"></circle></svg>
+        </button>
+        <div style="display:flex; align-items:center; justify-content:center; gap:6px; background:var(--color-surface); padding:5px 14px; border-radius:999px; box-shadow:var(--shadow-md); flex:1; min-width:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8 L7 3 L9 8"></path><path d="M20 8 L17 3 L15 8"></path><path d="M4 8 C4 15 8 19 12 19 C16 19 20 15 20 8 C20 8 16 10 12 10 C8 10 4 8 4 8 Z"></path></svg>
+          <span style="font-family:var(--font-heading); font-size:13px; color:var(--color-accent-700); letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{roomName}}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+          <button class="btn btn-icon" style="width:28px; height:28px; padding:0;" title="New game">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3M21 12a9 9 0 0 1-15.5 6.3"></path><path d="M18 3v4h-4M6 21v-4h4"></path></svg>
+          </button>
+          <button class="btn btn-icon" style="width:28px; height:28px; padding:0;" title="Exit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"></path><path d="M16 17l5-5-5-5M21 12H9"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <div style="align-self:center; display:flex; align-items:center; gap:6px; background:var(--color-accent-2-100); padding:5px 14px; border-radius:999px; box-shadow:var(--shadow-sm);">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-2-700)" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 0 1-10 0V4Z"></path><path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.5 4 4 4.3M17 5h3a1 1 0 0 1 1 1c0 2.5-1.5 4-4 4.3"></path></svg>
+        <span style="font-family:var(--font-body); font-weight:700; font-size:10.5px; color:var(--color-accent-2-700); white-space:nowrap;">Win condition: 5 Cats or 40 points</span>
+      </div>
+
+      <div style="display:flex; justify-content:center; gap:6px;">
+        <sc-for list="{{players}}" as="p" hint-placeholder-count="3">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px; background:var(--color-surface); padding:6px 8px; border-radius:var(--radius-md); box-shadow:{{p.cardShadow}}; animation:{{p.anim}}; flex:1; min-width:0;">
+            <span style="font-family:var(--font-heading); font-size:11.5px; color:var(--color-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">{{p.name}}</span>
+            <span style="font-family:var(--font-body); font-weight:700; font-size:9.5px; background:var(--color-accent-100); color:var(--color-accent-700); padding:1px 7px; border-radius:999px; white-space:nowrap;">{{p.points}} pts</span>
+            <sc-if value="{{p.active}}" hint-placeholder-val="{{false}}">
+              <span style="font-size:8.5px; font-weight:700; color:var(--color-accent-2-700); background:var(--color-accent-2-100); padding:1px 6px; border-radius:999px;">Turn</span>
+            </sc-if>
+            <div style="display:flex; gap:2px; flex-wrap:wrap; justify-content:center; min-height:36px; align-items:center;">
+              <sc-for list="{{p.cats}}" as="c" hint-placeholder-count="2">
+                <dc-import name="CatCard" rank="{{c.rank}}" bg="{{c.bg}}" text="{{c.text}}" width="{{24}}" hint-size="24px,34px"></dc-import>
+              </sc-for>
+              <sc-if value="{{p.noCats}}" hint-placeholder-val="{{false}}">
+                <span style="color:var(--color-neutral-400); font-size:8.5px; font-style:italic;">none</span>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:center; gap:12px; padding:4px 0; flex:1;">
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(3,1fr); gap:6px;">
+          <sc-for list="{{boardLeft}}" as="b" hint-placeholder-count="6">
+            <dc-import name="CatCard" face-down="{{true}}" width="{{42}}" hint-size="42px,59px"></dc-import>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <dc-import name="CatCard" face-down="{{true}}" width="{{42}}" hint-size="42px,59px"></dc-import>
+            <span style="font-size:9px; font-weight:700; color:var(--color-bg); background:rgba(0,0,0,0.3); padding:1px 8px; border-radius:999px;">Draw</span>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <dc-import name="CatCard" rank="{{discard.rank}}" bg="{{discard.bg}}" text="{{discard.text}}" width="{{42}}" hint-size="42px,59px"></dc-import>
+            <span style="font-size:9px; font-weight:700; color:var(--color-bg); background:rgba(0,0,0,0.3); padding:1px 8px; border-radius:999px;">Discard</span>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(2,1fr); grid-template-rows:repeat(3,1fr); gap:6px;">
+          <sc-for list="{{boardRight}}" as="b" hint-placeholder-count="6">
+            <dc-import name="CatCard" face-down="{{true}}" width="{{42}}" hint-size="42px,59px"></dc-import>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; align-items:center; gap:5px; background:rgba(15,58,30,0.4); padding:8px 10px; border-radius:var(--radius-md); align-self:center;">
+        <span style="font-family:var(--font-heading); font-size:11px; color:var(--color-bg); white-space:nowrap;">Your Cats</span>
+        <div style="display:flex; gap:5px; flex-wrap:wrap; min-height:87px; align-items:center; justify-content:center;">
+          <sc-for list="{{collected}}" as="c" hint-placeholder-count="4">
+            <dc-import name="CatCard" rank="{{c.rank}}" bg="{{c.bg}}" text="{{c.text}}" width="{{62}}" hint-size="62px,87px"></dc-import>
+          </sc-for>
+          <sc-if value="{{collectedEmpty}}" hint-placeholder-val="{{false}}">
+            <span style="color:rgba(245,234,216,0.65); font-size:10.5px; font-style:italic;">No cats yet</span>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="align-self:center; display:flex; flex-direction:column; gap:3px; background:var(--color-surface); padding:8px 14px; border-radius:var(--radius-md); box-shadow:var(--shadow-md); max-width:96%; width:100%; box-sizing:border-box;">
+        <sc-for list="{{messages}}" as="m" hint-placeholder-count="3">
+          <div style="display:flex; align-items:center; gap:6px; opacity:{{m.opacity}};">
+            <span style="font-size:{{m.emojiSize}}px; line-height:1;">{{m.emoji}}</span>
+            <span style="font-family:var(--font-body); font-weight:{{m.weight}}; font-size:{{m.fontSize}}px; color:var(--color-text);">{{m.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex; justify-content:center; align-items:flex-end; padding-top:4px;">
+        <sc-for list="{{hand}}" as="c" hint-placeholder-count="5">
+          <div style="transform:rotate({{c.rot}}deg) translateY({{c.ty}}px); transition:transform .18s ease; margin-left:{{c.ml}}px;">
+            <dc-import name="CatCard" rank="{{c.rank}}" bg="{{c.bg}}" text="{{c.text}}" selected="{{c.selected}}" on-click="{{c.onClick}}" width="{{62}}" hint-size="62px,87px"></dc-import>
+          </div>
+        </sc-for>
+      </div>
+
+    </div>
+  </x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:440,&quot;height&quot;:900},&quot;activePlayer&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Sam&quot;,&quot;options&quot;:[&quot;Ruby&quot;,&quot;Sam&quot;,&quot;Theo&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Game State&quot;},&quot;collectedCount&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:4,&quot;min&quot;:0,&quot;max&quot;:7,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Game State&quot;}}">
+class Component extends DCLogic {
+  state = { selectedHand: null };
+
+  renderVals() {
+    const suits = {
+      tabby: { bg: 'var(--color-accent-500)', text: 'var(--color-bg)' },
+      siamese: { bg: 'var(--color-accent-2-500)', text: 'var(--color-bg)' },
+      midnight: { bg: 'var(--color-neutral-900)', text: 'var(--color-bg)' },
+      snow: { bg: 'var(--color-neutral-100)', text: 'var(--color-neutral-900)' },
+    };
+    const mk = (suit, rank) => ({ ...suits[suit], rank });
+
+    const activePlayer = this.props.activePlayer || 'Sam';
+    const boardLeft = Array.from({ length: 6 }, (_, i) => ({ id: 'l' + i }));
+    const boardRight = Array.from({ length: 6 }, (_, i) => ({ id: 'r' + i }));
+
+    const rawPlayers = [
+      { name: 'Ruby', points: 9, cats: [mk('tabby', 7), mk('midnight', 2)] },
+      { name: 'Sam', points: 14, cats: [mk('siamese', 3), mk('tabby', 9), mk('snow', 5), mk('midnight', 1)] },
+      { name: 'Theo', points: 6, cats: [mk('snow', 8)] },
+      { name: 'Maya', points: 11, cats: [mk('midnight', 5), mk('tabby', 3)] },
+    ];
+    const players = rawPlayers.map(p => {
+      const active = p.name === activePlayer;
+      return {
+        ...p,
+        active,
+        noCats: p.cats.length === 0,
+        cardShadow: active ? '0 0 0 3px var(--color-accent), var(--shadow-md)' : 'var(--shadow-sm)',
+        anim: active ? 'turnGlow 2.2s ease-in-out infinite' : 'none',
+      };
+    });
+
+    const collectedPool = [mk('tabby', 2), mk('siamese', 5), mk('snow', 8), mk('midnight', 4), mk('tabby', 6), mk('siamese', 9), mk('snow', 1)];
+    const collectedCount = this.props.collectedCount != null ? Number(this.props.collectedCount) : 4;
+    const collected = collectedPool.slice(0, Math.max(0, Math.min(7, collectedCount)));
+
+    const selected = this.state.selectedHand;
+    const rots = [-10, -5, 0, 5, 10];
+    const tys = [8, 2, 0, 2, 8];
+    const mls = [0, -16, -16, -16, -16];
+    const handBase = [mk('tabby', 9), mk('siamese', 1), mk('midnight', 6), mk('snow', 3), mk('tabby', 4)];
+    const hand = handBase.map((c, i) => ({
+      ...c,
+      rot: rots[i],
+      ty: selected === i ? tys[i] - 14 : tys[i],
+      ml: mls[i],
+      selected: selected === i,
+      onClick: () => this.setState(s => ({ selectedHand: s.selectedHand === i ? null : i })),
+    }));
+
+    return {
+      roomName: 'Crazy Cat Lady',
+      players,
+      boardLeft,
+      boardRight,
+      collected,
+      collectedEmpty: collected.length === 0,
+      discard: mk('siamese', 7),
+      hand,
+      messages: [
+        {
+          text: activePlayer === 'Ruby' ? "Ruby's turn — choosing a card..." : activePlayer === 'Theo' ? "Theo's turn — choosing a card..." : "Sam's turn — choosing a card...",
+          emoji: '🐱', emojiSize: 15, weight: 600, fontSize: 11.5, opacity: 1,
+        },
+        { text: 'Ruby drew a card and discarded a 7.', emoji: '🔄', emojiSize: 12, weight: 500, fontSize: 10, opacity: 0.7 },
+        { text: 'Theo played a set of 3 Tabby cats!', emoji: '🎉', emojiSize: 12, weight: 500, fontSize: 10, opacity: 0.55 },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

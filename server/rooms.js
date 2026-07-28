@@ -12,6 +12,7 @@ import {
   respondToWakeChoiceAsAi
 } from "../src/game/engine.js";
 import { takeAiTurn, pickRandomAiName } from "../src/game/ai.js";
+import { isValidBlockTimerSeconds, DEFAULT_BLOCK_TIMER_SECONDS } from "../src/game/blockTimer.js";
 
 const AI_THINK_DELAY_MS = 700;
 const ROOM_NAME_MIN_LENGTH = 4;
@@ -77,7 +78,7 @@ function assignSeat(room, socketId, name) {
 
 // numAiOpponents seats are always the LAST numAiOpponents seats (e.g. 4
 // players / 2 AI -> seats 2,3 are AI). The creator always gets seat 0.
-export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomName }) {
+export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomName, blockTimerSeconds }) {
   if (numAiOpponents >= numPlayers) {
     return { error: "Need at least one human seat" };
   }
@@ -86,6 +87,12 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomNam
   if (nameResult.error) {
     return { error: nameResult.error };
   }
+
+  // A malicious/buggy client could send anything here — fall back to the
+  // default rather than trusting an out-of-range or malformed value.
+  const validBlockTimerSeconds = isValidBlockTimerSeconds(blockTimerSeconds)
+    ? blockTimerSeconds
+    : DEFAULT_BLOCK_TIMER_SECONDS;
 
   const aiPlayerIds = [];
   for (let i = numPlayers - numAiOpponents; i < numPlayers; i++) {
@@ -101,6 +108,7 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomNam
     numPlayers,
     aiPlayerIds,
     humanSeats,
+    blockTimerSeconds: validBlockTimerSeconds,
     seatToSocket: new Map(),
     socketToSeat: new Map(),
     playerNames: new Array(numPlayers).fill(null),

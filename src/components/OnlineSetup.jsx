@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
 import { createRoom, joinRoom, onRoomState } from "../multiplayer/socketClient.js";
+import { BLOCK_TIMER_MIN, BLOCK_TIMER_MAX, DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 
 const ROOM_NAME_MIN_LENGTH = 4;
 const ROOM_NAME_MAX_LENGTH = 16;
+const BLOCK_TIMER_CHOICES = Array.from(
+  { length: BLOCK_TIMER_MAX - BLOCK_TIMER_MIN + 1 },
+  (_, i) => BLOCK_TIMER_MIN + i
+);
 
 export default function OnlineSetup({ onReady, onBack }) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
   const [numAiOpponents, setNumAiOpponents] = useState(0);
+  const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
   const [playerName, setPlayerName] = useState("");
   const [roomNameInput, setRoomNameInput] = useState("");
   const [joinRoomName, setJoinRoomName] = useState("");
@@ -34,14 +40,30 @@ export default function OnlineSetup({ onReady, onBack }) {
   const isRoomNameValid =
     trimmedRoomNameInput.length >= ROOM_NAME_MIN_LENGTH && trimmedRoomNameInput.length <= ROOM_NAME_MAX_LENGTH;
 
+  // The ack itself carries the room's current state — if this join/create
+  // happened to fill the last seat, the game is already "playing" by the
+  // time we see this response, and we can jump straight into it. Waiting
+  // instead for a subsequent "roomState" broadcast would race the effect
+  // below (which only starts listening once `room` is set and this
+  // component re-renders) against the server's near-simultaneous broadcast,
+  // and could miss it — leaving the joining player stuck on this screen
+  // forever even though the game already started for everyone else.
+  function handleJoined(result) {
+    if (result.status === "playing") {
+      onReady({ roomName: result.roomName, playerId: result.playerId, initialState: result });
+    } else {
+      setRoom({ roomName: result.roomName, playerId: result.playerId });
+    }
+  }
+
   async function handleCreate() {
     setError(null);
-    const result = await createRoom(numPlayers, numAiOpponents, playerName, roomNameInput);
+    const result = await createRoom(numPlayers, numAiOpponents, playerName, roomNameInput, blockTimerSeconds);
     if (result.error) {
       setError(result.error);
       return;
     }
-    setRoom({ roomName: result.roomName, playerId: result.playerId });
+    handleJoined(result);
   }
 
   async function handleJoin() {
@@ -51,7 +73,7 @@ export default function OnlineSetup({ onReady, onBack }) {
       setError(result.error);
       return;
     }
-    setRoom({ roomName: result.roomName, playerId: result.playerId });
+    handleJoined(result);
   }
 
   if (room) {
@@ -92,9 +114,15 @@ export default function OnlineSetup({ onReady, onBack }) {
             placeholder="e.g. Kittens"
           />
         </label>
-        <p className="setup-hint">
-          {ROOM_NAME_MIN_LENGTH}-{ROOM_NAME_MAX_LENGTH} characters.
-        </p>
+        {trimmedRoomNameInput.length > 0 && !isRoomNameValid ? (
+          <p className="setup-error">
+            Room name must be {ROOM_NAME_MIN_LENGTH}-{ROOM_NAME_MAX_LENGTH} characters.
+          </p>
+        ) : (
+          <p className="setup-hint">
+            {ROOM_NAME_MIN_LENGTH}-{ROOM_NAME_MAX_LENGTH} characters.
+          </p>
+        )}
         <label className="setup-field">
           Total players
           <select value={numPlayers} onChange={e => {
@@ -113,6 +141,18 @@ export default function OnlineSetup({ onReady, onBack }) {
             {Array.from({ length: numPlayers }, (_, n) => n).map(n => (
               <option key={n} value={n}>{n}</option>
             ))}
+          </select>
+        </label>
+        <label className="setup-field">
+          Block response time
+          <select
+            value={blockTimerSeconds === null ? "never" : blockTimerSeconds}
+            onChange={e => setBlockTimerSeconds(e.target.value === "never" ? null : Number(e.target.value))}
+          >
+            {BLOCK_TIMER_CHOICES.map(n => (
+              <option key={n} value={n}>{n} seconds</option>
+            ))}
+            <option value="never">Never (no limit)</option>
           </select>
         </label>
         {error && <p className="setup-error">{error}</p>}

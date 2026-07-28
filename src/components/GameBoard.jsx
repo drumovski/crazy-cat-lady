@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
+import CardBack from "./CardBack.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
 import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
+import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
+import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
 
 // selection.mode drives what a click on a card/cat/slot means next:
 //   'dog'          -> next: click a sleeping slot to wake
@@ -10,7 +13,6 @@ import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
 //   'catnip-target'-> next: click any opponent's cat directly to put it to sleep
 // Re-clicking the originally-selected hand card cancels out of any mode.
 const EMPTY_SELECTION = {};
-const BLOCK_TIMER_SECONDS = 5;
 
 const CARD_TYPE_LABELS = {
   dog: "Dog",
@@ -29,7 +31,7 @@ const CARD_TYPE_LABELS = {
 // single "you" — the banner is visible to the whole shared screen regardless
 // of whose turn it is now — so isSelf is always false there and every
 // message names the affected player instead of assuming it's the viewer.
-function formatLastMessage(message, getName, isSelf) {
+function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
   const who = isSelf ? "You" : getName(message.playerId);
   const subjectPossessive = isSelf ? "your" : `${getName(message.playerId)}'s`;
   const ownPossessive = isSelf ? "your" : "their";
@@ -61,7 +63,9 @@ function formatLastMessage(message, getName, isSelf) {
     case "laserWakeChoice":
       return `${who} played Laser Pointer — the count landed on ${getName(message.targetId)}, who may wake a sleeping cat!`;
     case "wokeCat":
-      return `${who} woke ${message.catName}!`;
+      return `${who} woke a ${message.catName} Cat!`;
+    case "wokeBonusCat":
+      return `${who} woke the ${message.catName} Cat so ${isSelf ? "you" : "they"} can wake another Cat!`;
     case "wokeCatConflict":
       return `${who} tried to wake ${message.catName}, but already had a matching cat — it went back to sleep.`;
     case "discarded":
@@ -71,7 +75,11 @@ function formatLastMessage(message, getName, isSelf) {
       const counterLabel = message.cardType === "fish" ? "Seagull" : "Snail";
       const verb = message.cardType === "fish" ? "steal" : "put to sleep";
       const hasVerb = isSelf ? "have" : "has";
-      return `${getName(message.attackerId)} played ${cardLabel} to ${verb} ${subjectPossessive} ${message.catName}! ${who} ${hasVerb} ${BLOCK_TIMER_SECONDS} seconds to block with a ${counterLabel}!`;
+      const timerPhrase =
+        blockTimerSeconds === null
+          ? `${who} can block with a ${counterLabel} at any time!`
+          : `${who} ${hasVerb} ${blockTimerSeconds} seconds to block with a ${counterLabel}!`;
+      return `${getName(message.attackerId)} played ${cardLabel} to ${verb} ${subjectPossessive} ${message.catName}! ${timerPhrase}`;
     }
     default:
       return "";
@@ -132,6 +140,7 @@ export default function GameBoard({
   aiPlayerIds = [],
   playerNames = [],
   myPlayerId, // undefined in local hotseat mode; a specific seat in online mode
+  blockTimerSeconds = DEFAULT_BLOCK_TIMER_SECONDS, // null means no timer (block whenever)
   onNewGame,
   onPlayDog,
   onPlayFish,
@@ -157,6 +166,12 @@ export default function GameBoard({
   // countdown on unrelated updates.
   const [blockTimeLeft, setBlockTimeLeft] = useState(null);
 
+  // Guards against React StrictMode's dev-only double-invoke of effects
+  // (mount -> cleanup -> mount), which would otherwise play every sound
+  // batch twice in `npm run dev` — a ref (unlike the effect itself) survives
+  // that cycle, so the second invocation for the same batch is a no-op.
+  const playedSfxRef = useRef(null);
+
   const getName = id => playerNames[id] || `Player ${id + 1}`;
 
   const activePlayerId = game.pendingAction
@@ -180,10 +195,21 @@ export default function GameBoard({
   useEffect(() => {
     if (!game.lastMessage) return;
     const isSelf = myPlayerId === game.lastMessage.playerId;
-    const text = formatLastMessage(game.lastMessage, getName, isSelf);
+    const text = formatLastMessage(game.lastMessage, getName, isSelf, blockTimerSeconds);
     setMessageHistory(prev => (prev[0] === text ? prev : [text, ...prev].slice(0, 3)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.lastMessage]);
+
+  // game.sfxEvents is a fresh array set by whichever engine function last
+  // ran (see engine.js) — a new reference every real action, so this fires
+  // once per action without needing its own dedupe key.
+  useEffect(() => {
+    if (game.sfxEvents && game.sfxEvents.length > 0 && playedSfxRef.current !== game.sfxEvents) {
+      playedSfxRef.current = game.sfxEvents;
+      playSfxBatch(game.sfxEvents);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.sfxEvents]);
 
   // Keyed off the pending action's *content* rather than object identity —
   // in online mode every broadcast re-serializes the game state into fresh
@@ -194,16 +220,24 @@ export default function GameBoard({
     : null;
 
   useEffect(() => {
-    if (!pendingActionKey) {
+    if (!pendingActionKey || blockTimerSeconds === null) {
       setBlockTimeLeft(null);
       return undefined;
     }
-    setBlockTimeLeft(BLOCK_TIMER_SECONDS);
+    setBlockTimeLeft(blockTimerSeconds);
+    // The ticking clock loops for as long as the countdown runs (repeating
+    // if the clip is shorter than the count) and is cut off immediately —
+    // even mid-clip — the moment this effect cleans up, whether that's a
+    // real timeout or the target responding early.
+    startClockTick();
     const interval = setInterval(() => {
       setBlockTimeLeft(prev => (prev === null ? null : Math.max(0, prev - 1)));
     }, 1000);
-    return () => clearInterval(interval);
-  }, [pendingActionKey]);
+    return () => {
+      clearInterval(interval);
+      stopClockTick();
+    };
+  }, [pendingActionKey, blockTimerSeconds]);
 
   // Everyone watching (local hotseat's shared screen, or any online client)
   // sees the countdown, but only the actual target's own client drives the
@@ -319,14 +353,15 @@ export default function GameBoard({
   const opponents = game.players.filter(p => p.id !== revealSeat);
 
   // The discard pile doubles as the "confirm discard" target: with a
-  // Dog/Fish/Catnip card selected, clicking it discards that card instead of
+  // Fish/Catnip card selected, clicking it discards that card instead of
   // playing it; otherwise, with Number/Seagull/Snail cards selected, it
   // discards that selection (single card, or a valid matching pair/sum).
+  // Dog cards are excluded — they must be played, never discarded.
   const canDiscardViaPile =
     canInteract &&
     !game.pendingAction &&
     !game.pendingWakeChoice &&
-    (selection.mode ? true : discardSelection.length > 0 && canConfirmDiscard);
+    (selection.mode ? selection.mode !== "dog" : discardSelection.length > 0 && canConfirmDiscard);
 
   function handleDiscardPileClick() {
     if (selection.mode) {
@@ -410,7 +445,7 @@ export default function GameBoard({
 
         <div className="pile-column">
           <div className="pile-group">
-            <div className="card card-size-board card-back" />
+            <CardBack variant="deck" size="board" title="Draw pile" />
             <span className="pile-label">Draw · {game.deck.length}</span>
           </div>
           <div

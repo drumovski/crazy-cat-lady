@@ -1,3 +1,5 @@
+import CardBack from "./CardBack.jsx";
+
 // Renders a subset of the 12 sleeping-cat slots (a `count`-slot window
 // starting at `startIndex`) as a 2-column grid — used to show two 2x3 groups
 // flanking the draw/discard piles, matching the design's board layout. Click
@@ -10,17 +12,28 @@ export default function SleepingCatsGrid({ sleepingCats, startIndex = 0, count =
       {slots.map((cat, i) => {
         const slot = startIndex + i;
         const isEmpty = cat === null;
-        const isSelectable = !isEmpty && selectable;
+
+        if (isEmpty) {
+          return (
+            <button
+              key={slot}
+              type="button"
+              className="card card-size-board sleeping-slot-empty"
+              disabled
+              title="Empty"
+            />
+          );
+        }
+
         return (
-          <button
+          <CardBack
             key={slot}
-            type="button"
-            className={`card card-size-board card-back${isEmpty ? " sleeping-slot-empty" : ""}${
-              isSelectable ? " card-selectable" : ""
-            }`}
-            onClick={isSelectable ? () => onSlotClick(slot) : undefined}
-            disabled={isEmpty || !selectable}
-            title={isEmpty ? "Empty" : "A sleeping cat"}
+            variant="cat"
+            size="board"
+            selectable={selectable}
+            onClick={selectable ? () => onSlotClick(slot) : undefined}
+            disabled={!selectable}
+            title="A sleeping cat"
           />
         );
       })}
