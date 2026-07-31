@@ -93,6 +93,23 @@ testAiSkipsFishWhenNoOpponentHasCats();
 function testTakeAiTurnAppliesTheChosenAction() {
   const game = createGame(2);
   game.players[0].hand = [{ type: "dog" }];
+  // Replace every sleeping slot with a plain (non-Sphynx, no pairKey) cat.
+  // Left to the real shuffled sleepingCats, the AI's "random available slot"
+  // policy has a ~1-in-12 chance of landing on the Sphynx, which grants a
+  // bonus wake instead of finishing the turn — leaving currentPlayerIndex
+  // unchanged and making the assertion below flaky. (Reducing to a single
+  // available slot instead of replacing all 12 would trade that flakiness
+  // for another: waking the one remaining cat empties sleepingCats entirely,
+  // which triggers checkWinner's "all cats distributed" fallback and ends
+  // the game without advancing the turn either.)
+  game.sleepingCats = game.sleepingCats.map((cat, slot) => ({
+    type: "cat",
+    id: 100 + slot,
+    name: "Test Cat",
+    points: 5,
+    slot,
+    awake: false
+  }));
   const catsBefore = game.players[0].cats.length;
 
   takeAiTurn(game, 0);

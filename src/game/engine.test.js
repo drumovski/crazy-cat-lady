@@ -12,6 +12,7 @@ import {
   discardCard,
   discardMathSet,
   playLaserPointer,
+  resolveLaserReveal,
   checkWinner
 } from "./engine.js";
 
@@ -146,6 +147,11 @@ function testLaserPointer() {
 
   const catsBefore = game.players[1].cats.length;
   playLaserPointer(game, 0, 0);
+
+  console.log("Card revealed face-up, effect not yet applied:", game.pendingLaserReveal && game.pendingLaserReveal.revealedCard.value === 2);
+  console.log("Turn not yet advanced during reveal:", game.currentPlayerIndex === 0);
+
+  resolveLaserReveal(game);
 
   console.log("Pending wake choice for player 1:", game.pendingWakeChoice && game.pendingWakeChoice.playerId);
 

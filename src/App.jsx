@@ -5,6 +5,7 @@ import {
   playFish,
   playCatnip,
   playLaserPointer,
+  resolveLaserReveal,
   discardCard,
   discardMathSet,
   respondToPendingAction,
@@ -14,14 +15,20 @@ import {
 } from "./game/engine.js";
 import { takeAiTurn } from "./game/ai.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "./game/blockTimer.js";
+import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "./game/timings.js";
 import { onRoomState, sendGameAction } from "./multiplayer/socketClient.js";
 import ModeSelect from "./components/ModeSelect.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
 import OnlineSetup from "./components/OnlineSetup.jsx";
 import GameBoard from "./components/GameBoard.jsx";
+import { preloadCardImages } from "./components/preloadCardImages.js";
 import "./App.css";
 
-const AI_THINK_DELAY_MS = 700;
+// Fires once, as soon as this module loads (menu screen, before any game
+// exists) — starts warming the browser's image cache for the whole deck so
+// the first hand a player actually sees is already cached rather than
+// fetching each card's art fresh.
+preloadCardImages();
 
 export default function App() {
   const [screen, setScreen] = useState("menu"); // 'menu' | 'local' | 'online'
@@ -44,7 +51,7 @@ export default function App() {
   // reaction to respond to), automatically decide and apply their move
   // after a short delay so the turn transition is readable.
   useEffect(() => {
-    if (screen !== "local" || !game || game.winner !== undefined) {
+    if (screen !== "local" || !game || game.winner !== undefined || game.pendingLaserReveal) {
       return undefined;
     }
 
@@ -72,6 +79,23 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [screen, game, aiPlayerIds]);
+
+  // A played Laser Pointer flips the top card face-up on the deck for
+  // everyone to see (game.pendingLaserReveal) before its effect — added to a
+  // hand, or the count-around wake choice — is actually applied. This isn't
+  // a decision anyone (human or AI) makes, so it always resolves on its own
+  // timer regardless of whose turn it is.
+  useEffect(() => {
+    if (screen !== "local" || !game || game.winner !== undefined || !game.pendingLaserReveal) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setGame(prevGame => ({ ...resolveLaserReveal(prevGame) }));
+    }, LASER_REVEAL_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [screen, game]);
 
   // Online: once we have a session (created or joined a room), subscribe to
   // that room's authoritative state from the server. All game logic and AI

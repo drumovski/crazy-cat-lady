@@ -3,6 +3,8 @@ import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
 import CardBack from "./CardBack.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
+import RulesModal from "./RulesModal.jsx";
+import SoundToggle from "./SoundToggle.jsx";
 import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
@@ -50,6 +52,8 @@ function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
       return `${who} stole ${getName(message.targetId)}'s ${message.catName} with ${ownPossessive} Fish!`;
     case "catnippedConfirm":
       return `${who} put ${getName(message.targetId)}'s ${message.catName} back to sleep with ${ownPossessive} Catnip!`;
+    case "laserRevealing":
+      return isSelf ? "You played Laser Pointer — revealing the top card..." : `${who} played Laser Pointer — revealing the top card...`;
     case "laserNoCards":
       return isSelf ? "No cards left to reveal." : `${who} had no cards left to reveal.`;
     case "laserNoSlots":
@@ -154,6 +158,7 @@ export default function GameBoard({
   const [selection, setSelection] = useState(EMPTY_SELECTION);
   const [discardSelection, setDiscardSelection] = useState([]);
   const [showHelp, setShowHelp] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   // Rolling log of the last 3 events (most recent first). The engine only
   // ever exposes the single most recent `lastMessage` (and clears it on the
   // next ordinary turn), so the history has to be accumulated client-side.
@@ -189,7 +194,15 @@ export default function GameBoard({
   // an AI's turn. Online: a client only ever sees its own seat's hand, and
   // can only act when it's genuinely that seat's turn/decision.
   const revealSeat = isOnline ? myPlayerId : activePlayerId;
-  const canInteract = isOnline ? activePlayerId === myPlayerId : !isAiDecision;
+
+  // Single gate for "don't accept input right now" — currently just the
+  // Laser Pointer reveal (not a decision, just a shared beat everyone
+  // watches before it resolves itself), but this is the one place to widen
+  // once card-fly animations land (e.g. OR in a "some card is still mid-
+  // flight" flag) rather than threading a second condition through
+  // canInteract by hand.
+  const isBoardBusy = Boolean(game.pendingLaserReveal);
+  const canInteract = !isBoardBusy && (isOnline ? activePlayerId === myPlayerId : !isAiDecision);
   const revealedPlayer = game.players[revealSeat];
 
   useEffect(() => {
@@ -379,9 +392,12 @@ export default function GameBoard({
   return (
     <div className="game-board">
       <div className="board-header">
-        <button type="button" className="icon-button" onClick={() => setShowHelp(v => !v)} title="Help">
-          <HelpIcon />
-        </button>
+        <div className="board-header-left">
+          <button type="button" className="icon-button" onClick={() => setShowHelp(v => !v)} title="Help">
+            <HelpIcon />
+          </button>
+          <SoundToggle />
+        </div>
         <div className="room-pill">
           <CatEarIcon />
           <span>Crazy Cat Lady</span>
@@ -399,11 +415,25 @@ export default function GameBoard({
             card. Otherwise discard a Number/Seagull/Snail card — or a matching pair/sum of Number cards for
             extra draws.
           </p>
-          <button type="button" className="secondary-button" onClick={() => setShowHelp(false)}>
-            Got it
-          </button>
+          <div className="help-popover-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                setShowHelp(false);
+                setShowRules(true);
+              }}
+            >
+              Full Rules
+            </button>
+            <button type="button" className="secondary-button" onClick={() => setShowHelp(false)}>
+              Got it
+            </button>
+          </div>
         </div>
       )}
+
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
       <div className="win-pill">
         <TrophyIcon />
@@ -445,8 +475,16 @@ export default function GameBoard({
 
         <div className="pile-column">
           <div className="pile-group">
-            <CardBack variant="deck" size="board" title="Draw pile" />
-            <span className="pile-label">Draw · {game.deck.length}</span>
+            {game.pendingLaserReveal && game.pendingLaserReveal.revealedCard ? (
+              // Laser Pointer flips the top card face-up in place, on top of
+              // the deck, so every player can see it before it resolves.
+              <div className="laser-reveal-card">
+                <Card card={game.pendingLaserReveal.revealedCard} size="board" />
+              </div>
+            ) : (
+              <CardBack variant="deck" size="board" title="Draw pile" />
+            )}
+            <span className="pile-label">{game.pendingLaserReveal ? "Revealed!" : `Draw · ${game.deck.length}`}</span>
           </div>
           <div
             className={`pile-group${canDiscardViaPile ? " pile-group-clickable" : ""}`}
@@ -505,8 +543,13 @@ export default function GameBoard({
         {revealedPlayer.hand.map((card, cardIndex) => {
           const isInteractive = canInteract;
           const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
+          // Keyed by the card's own stable id, not its current index — a
+          // played/discarded card splices out and shifts every later card's
+          // index down, which would otherwise make React (and later, Framer
+          // Motion's layout animation) think the card at each shifted index
+          // changed identity instead of just moving.
           return (
-            <div key={cardIndex} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
+            <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
               <div style={{ transform: style.transform }}>
                 <Card
                   card={card}

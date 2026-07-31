@@ -9,7 +9,12 @@ let socket = null;
 
 function getSocket() {
   if (!socket) {
-    socket = io(SERVER_URL, { transports: ["websocket"], autoConnect: true });
+    // Allow the long-polling fallback (Socket.IO's default behavior) rather
+    // than forcing WebSocket-only — some hosting proxies (e.g. shared-hosting
+    // Node.js apps behind a reverse proxy) don't pass WebSocket upgrades
+    // through cleanly, and without polling as a fallback the connection
+    // would just fail outright instead of degrading gracefully.
+    socket = io(SERVER_URL, { transports: ["websocket", "polling"], autoConnect: true });
   }
   return socket;
 }

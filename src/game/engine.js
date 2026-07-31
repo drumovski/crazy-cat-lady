@@ -1,41 +1,54 @@
 export function createDeck() {
   const deck = [];
+  // Every card gets a stable, unique id at creation and keeps it for its
+  // whole lifetime as it moves between the deck/hand/discard pile (never
+  // regenerated on reshuffle or redraw). Array position is NOT stable
+  // identity — discarding/playing a card splices it out and shifts every
+  // later card in the hand down an index — so UI code (React keys, and
+  // eventually Framer Motion's layoutId) needs to track cards by this id,
+  // not by their current index, wherever it has to animate or reconcile
+  // "this specific card" across renders.
+  let nextId = 0;
 
   // Add number cards 1-10, four of each
   for (let value = 1; value <= 10; value++) {
     for (let copy = 0; copy < 4; copy++) {
-      deck.push({ type: "number", value: value });
+      deck.push({ type: "number", value: value, id: nextId++ });
     }
   }
 
-  // Add 8 Dog cards (wakes a cat)
+  // Add 8 Dog cards (wakes a cat). `variant` (1-8) picks which of the 8
+  // dog illustrations (public/cards/DogN.png) this specific card shows —
+  // assigned once here so it stays stable for the card's whole lifetime
+  // (hand -> discard -> reshuffled deck) instead of being re-randomized
+  // on every render.
   for (let i = 0; i < 8; i++) {
-    deck.push({ type: "dog" });
+    deck.push({ type: "dog", variant: i + 1, id: nextId++ });
   }
 
     // Add 4 Fish cards (steals a cat)
   for (let i = 0; i < 4; i++) {
-    deck.push({ type: "fish" });
+    deck.push({ type: "fish", id: nextId++ });
   }
 
   // Add 3 Seagull cards (blocks a Fish steal)
   for (let i = 0; i < 3; i++) {
-    deck.push({ type: "seagull" });
+    deck.push({ type: "seagull", id: nextId++ });
   }
 
   // Add 4 Catnip cards (puts an awake cat back to sleep)
   for (let i = 0; i < 4; i++) {
-    deck.push({ type: "catnip" });
+    deck.push({ type: "catnip", id: nextId++ });
   }
 
   // Add 3 Snail cards (blocks Catnip)
   for (let i = 0; i < 3; i++) {
-    deck.push({ type: "snail" });
+    deck.push({ type: "snail", id: nextId++ });
   }
 
   // Add 5 Laser Pointer cards
   for (let i = 0; i < 5; i++) {
-    deck.push({ type: "laser" });
+    deck.push({ type: "laser", id: nextId++ });
   }
 
   return deck;
@@ -151,7 +164,7 @@ export function validateTurn(game, playerId) {
     return false;
   }
 
-  if (game.pendingAction || game.pendingWakeChoice) {
+  if (game.pendingAction || game.pendingWakeChoice || game.pendingLaserReveal) {
     console.log("Another action is still awaiting a response!");
     return false;
   }
@@ -501,6 +514,12 @@ export function finishTurn(game, lastMessage = null) {
   advanceTurn(game);
 }
 
+// Playing a Laser Pointer only flips the top card face-up in place on the
+// deck (game.pendingLaserReveal) — it doesn't yet add it to a hand or decide
+// who may wake a cat. That happens in resolveLaserReveal, called after a
+// UI-driven delay so every player gets a beat to actually see the card that
+// came up before its effect is applied. validateTurn blocks any other action
+// while a reveal is pending, same as pendingAction/pendingWakeChoice.
 export function playLaserPointer(game, playerId, cardIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
@@ -522,9 +541,30 @@ export function playLaserPointer(game, playerId, cardIndex) {
     reshuffleDiscardIntoDeck(game);
   }
 
-  const revealedCard = game.deck.shift();
+  const revealedCard = game.deck.shift() ?? null;
 
-  if (revealedCard === undefined) {
+  game.pendingLaserReveal = { playerId, revealedCard };
+  game.lastMessage = { playerId, kind: "laserRevealing" };
+
+  return game; // wait for resolveLaserReveal — turn does not advance yet
+}
+
+// Applies the effect of a card already revealed by playLaserPointer: a
+// Number card starts a count-around-the-table wake choice, anything else
+// goes straight into the revealing player's hand as their replacement draw.
+export function resolveLaserReveal(game) {
+  const pending = game.pendingLaserReveal;
+  if (!pending) {
+    return game;
+  }
+
+  const { playerId, revealedCard } = pending;
+  const player = game.players[playerId];
+
+  game.sfxEvents = [];
+  game.pendingLaserReveal = null;
+
+  if (revealedCard === null) {
     // Nothing left to reveal — just draw back up if possible.
     drawCard(game, player);
     finishTurn(game, { playerId, kind: "laserNoCards" });

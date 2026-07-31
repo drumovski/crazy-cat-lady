@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { createRoom, joinRoom, getRoom, removeSocket, handleAction, scheduleAiIfNeeded } from "./rooms.js";
+import { createRoom, joinRoom, getRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -54,7 +54,7 @@ io.on("connection", socket => {
     // forever. Handing over the state directly in the ack closes that race.
     callback({ roomName: room.roomName, playerId, ...roomState(room) });
     broadcastRoom(room);
-    scheduleAiIfNeeded(room, () => broadcastRoom(room));
+    scheduleNextStep(room, () => broadcastRoom(room));
   });
 
   socket.on("joinRoom", ({ roomName, name }, callback) => {
@@ -67,7 +67,7 @@ io.on("connection", socket => {
     socket.join(result.room.roomName);
     callback({ roomName: result.room.roomName, playerId: result.playerId, ...roomState(result.room) });
     broadcastRoom(result.room);
-    scheduleAiIfNeeded(result.room, () => broadcastRoom(result.room));
+    scheduleNextStep(result.room, () => broadcastRoom(result.room));
   });
 
   socket.on("gameAction", ({ roomName, type, args }) => {
@@ -83,7 +83,7 @@ io.on("connection", socket => {
 
     handleAction(room, playerId, type, args);
     broadcastRoom(room);
-    scheduleAiIfNeeded(room, () => broadcastRoom(room));
+    scheduleNextStep(room, () => broadcastRoom(room));
   });
 
   socket.on("disconnect", () => {

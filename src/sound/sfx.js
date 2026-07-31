@@ -1,3 +1,5 @@
+import { getMuted, subscribeMuted } from "./soundSettings.js";
+
 // One sound file per card/event, served statically from public/sounds/. Maps
 // the engine's sfxEvents keys (see engine.js) to filenames. mp3 (not the
 // original wav exports) to keep the deployed bundle small.
@@ -25,7 +27,7 @@ function getBaseAudio(key) {
 }
 
 export function playSfx(key) {
-  if (!SOUND_FILES[key]) return;
+  if (!SOUND_FILES[key] || getMuted()) return;
   const instance = getBaseAudio(key).cloneNode();
   // Autoplay can be blocked before the user has interacted with the page at
   // all — that's expected on first load, not an error worth surfacing.
@@ -59,6 +61,7 @@ function getClockAudio() {
 }
 
 export function startClockTick() {
+  if (getMuted()) return;
   const audio = getClockAudio();
   audio.currentTime = 0;
   audio.play().catch(() => {});
@@ -69,3 +72,10 @@ export function stopClockTick() {
   clockAudio.pause();
   clockAudio.currentTime = 0;
 }
+
+// The clock tick is the one looping (not one-shot) sound, so muting mid-
+// countdown needs to actively cut it off rather than just suppressing future
+// plays — otherwise it would keep looping until the countdown itself ends.
+subscribeMuted(muted => {
+  if (muted) stopClockTick();
+});

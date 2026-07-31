@@ -39,6 +39,7 @@ button {
 
 /* Setup screen */
 .setup-screen {
+  position: relative;
   text-align: center;
   margin: 0 auto;
   max-width: 420px;
@@ -47,6 +48,11 @@ button {
   align-items: center;
   gap: 16px;
   padding-top: 15vh;
+}
+.menu-sound-toggle {
+  position: absolute;
+  top: 12px;
+  left: 12px;
 }
 .setup-screen h1 {
   font-size: 32px;
@@ -168,6 +174,11 @@ button {
   justify-content: space-between;
   gap: 10px;
 }
+.board-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
 .icon-button {
   width: 28px;
@@ -220,6 +231,82 @@ button {
   gap: 10px;
   font-size: 13.5px;
   line-height: 1.4;
+}
+.help-popover-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rules-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 58, 30, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.rules-modal {
+  position: relative;
+  background: var(--cat-snow);
+  color: var(--text-h);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  /* Opened from ModeSelect's centered .setup-screen, so without this it
+     inherits text-align: center — override it here so the modal always
+     reads left-aligned regardless of where it's mounted from. */
+  text-align: left;
+}
+.rules-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+.rules-content h1 {
+  font-size: 22px;
+  margin: 0 24px 12px 0;
+}
+.rules-content h2 {
+  font-size: 16px;
+  color: var(--accent);
+  margin: 20px 0 8px;
+}
+.rules-content p {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+.rules-content ul,
+.rules-content ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.rules-content li {
+  margin-bottom: 4px;
+}
+.rules-quote {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent-border);
+  background: var(--accent-bg);
+  border-radius: var(--radius-sm);
+}
+.rules-quote p {
+  font-size: 12.5px;
+  margin: 0 0 6px;
+}
+.rules-quote p:last-child {
+  margin-bottom: 0;
 }
 
 .opponents-row {
@@ -324,6 +411,14 @@ button {
   align-items: center;
   gap: 4px;
   border-radius: var(--radius-sm);
+}
+@keyframes laserFlip {
+  0% { transform: scaleX(0); }
+  60% { transform: scaleX(1.1); }
+  100% { transform: scaleX(1); }
+}
+.laser-reveal-card {
+  animation: laserFlip 0.35s ease-out;
 }
 .pile-group-clickable {
   cursor: pointer;
@@ -482,6 +577,29 @@ button {
 .card:disabled {
   opacity: 0.55;
   cursor: default;
+}
+/* Illustrated cards (public/cards/) already draw their own card frame/border
+   — drop the CSS-drawn ones so we don't get a double border, and clip the
+   image to the button's own rounded corners. Placed before .card-selected/
+   -selectable below (same specificity) so their border still wins when both
+   apply. */
+.card-has-art {
+  padding: 0;
+  border: none;
+  background: none;
+  overflow: hidden;
+}
+.card-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Until the image finishes loading, the browser renders its alt text
+     (the card type name) as plain inherited-color text inside the card
+     box — hide that fallback so a slow-loading card is just a blank box
+     for a moment, not a readout of its own type in the wrong font. */
+  color: transparent;
+  font-size: 0;
 }
 .card-selected {
   border: 3px solid var(--accent);

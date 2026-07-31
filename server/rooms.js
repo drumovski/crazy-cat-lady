@@ -4,6 +4,7 @@ import {
   playFish,
   playCatnip,
   playLaserPointer,
+  resolveLaserReveal,
   discardCard,
   discardMathSet,
   respondToPendingAction,
@@ -13,8 +14,8 @@ import {
 } from "../src/game/engine.js";
 import { takeAiTurn, pickRandomAiName } from "../src/game/ai.js";
 import { isValidBlockTimerSeconds, DEFAULT_BLOCK_TIMER_SECONDS } from "../src/game/blockTimer.js";
+import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "../src/game/timings.js";
 
-const AI_THINK_DELAY_MS = 700;
 const ROOM_NAME_MIN_LENGTH = 4;
 const ROOM_NAME_MAX_LENGTH = 16;
 
@@ -172,12 +173,24 @@ function getDecisionMakerId(game) {
     : game.currentPlayerIndex;
 }
 
-// After any state change, checks whether an AI player owes the next move
-// (turn or reaction) and — if so — resolves it after a short delay, calling
-// onUpdate so the caller can broadcast the new state. Chains automatically
-// if the following decision-maker is also AI.
-export function scheduleAiIfNeeded(room, onUpdate) {
+// After any state change, checks whether the game is mid-Laser-Pointer-reveal
+// or an AI player owes the next move (turn or reaction) and — if so —
+// resolves it after a short delay, calling onUpdate so the caller can
+// broadcast the new state. Chains automatically as long as the following
+// step is also automatic (reveal resolution, or another AI decision).
+export function scheduleNextStep(room, onUpdate) {
   if (!room.game || room.game.winner !== undefined) {
+    return;
+  }
+
+  // A pending reveal isn't anyone's decision — human or AI — so it always
+  // resolves on its own timer regardless of whose turn it is.
+  if (room.game.pendingLaserReveal) {
+    setTimeout(() => {
+      resolveLaserReveal(room.game);
+      onUpdate();
+      scheduleNextStep(room, onUpdate);
+    }, LASER_REVEAL_DELAY_MS);
     return;
   }
 
@@ -195,6 +208,6 @@ export function scheduleAiIfNeeded(room, onUpdate) {
       takeAiTurn(room.game, decisionMakerId);
     }
     onUpdate();
-    scheduleAiIfNeeded(room, onUpdate);
+    scheduleNextStep(room, onUpdate);
   }, AI_THINK_DELAY_MS);
 }
