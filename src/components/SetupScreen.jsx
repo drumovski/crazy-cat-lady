@@ -7,10 +7,10 @@ const BLOCK_TIMER_CHOICES = Array.from(
   (_, i) => BLOCK_TIMER_MIN + i
 );
 
-export default function SetupScreen({ onStart }) {
+export default function SetupScreen({ onStart, initialNames = ["", "", "", "", ""] }) {
   const [numPlayers, setNumPlayers] = useState(2);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
-  const [playerNames, setPlayerNames] = useState(["", "", "", "", ""]);
+  const [playerNames, setPlayerNames] = useState(initialNames);
   const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
 
   function changeNumPlayers(n) {
@@ -42,7 +42,12 @@ export default function SetupScreen({ onStart }) {
       }
       return playerNames[playerId].trim() || `Player ${playerId + 1}`;
     });
-    onStart(numPlayers, aiPlayerIds, finalNames, blockTimerSeconds);
+    // Pass the raw (pre-fallback) typed names too, separate from finalNames
+    // (which has "Player N" substituted for blanks and AI names filled in)
+    // — the caller persists these verbatim so a player's name survives into
+    // their next game instead of being forced to retype it, without also
+    // "remembering" an auto-generated placeholder as if it were typed.
+    onStart(numPlayers, aiPlayerIds, finalNames, blockTimerSeconds, playerNames);
   }
 
   return (

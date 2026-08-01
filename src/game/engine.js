@@ -17,14 +17,23 @@ export function createDeck() {
     }
   }
 
-  // Add 8 Dog cards (wakes a cat). `variant` (1-8) picks which of the 8
-  // dog illustrations (public/cards/DogN.png) this specific card shows —
-  // assigned once here so it stays stable for the card's whole lifetime
-  // (hand -> discard -> reshuffled deck) instead of being re-randomized
-  // on every render.
-  for (let i = 0; i < 8; i++) {
-    deck.push({ type: "dog", variant: i + 1, id: nextId++ });
+  // Add 9 Dog cards (wakes a cat): 7 plain variants (`variant` 1-7, each just
+  // a different illustration with identical behavior), plus two with a real
+  // gameplay effect baked into `dogEffect` instead:
+  //   "guard"  (Guard Dog) — the woken cat becomes guarded (see playDog,
+  //                          playFish, playCatnip): it can never be stolen
+  //                          or put back to sleep.
+  //   "hotdog" (Hot Dog)   — wakes a second cat too, via the same
+  //                          pendingWakeChoice bonus-wake the Sphynx grants
+  //                          (see playDog).
+  // `variant` (image-only) and `dogEffect` (gameplay effect, own dedicated
+  // art) are mutually exclusive on a given card.
+  const PLAIN_DOG_VARIANTS = [1, 2, 3, 4, 5, 6, 7];
+  for (const variant of PLAIN_DOG_VARIANTS) {
+    deck.push({ type: "dog", variant, id: nextId++ });
   }
+  deck.push({ type: "dog", dogEffect: "guard", id: nextId++ });
+  deck.push({ type: "dog", dogEffect: "hotdog", id: nextId++ });
 
     // Add 4 Fish cards (steals a cat)
   for (let i = 0; i < 4; i++) {
@@ -83,10 +92,22 @@ export function dealHands(deck, numPlayers, handSize = 5) {
 // collection at once (see giveCatToPlayer) — the two Ginger Toms.
 // wakesBonus: waking this cat lets the same player immediately pick one more
 // sleeping cat slot to wake (the Sphynx).
+// variant: only the two Ginger Toms need one — same name, so `getCatImageSrc`
+// (Card.jsx) needs a way to tell them apart to show their two distinct
+// illustrations (Ginger1.png/Ginger2.png), same pattern as Dog's `variant`.
+//
+// CAT_ID_OFFSET: cat ids start well past createDeck()'s highest id (68 deck
+// cards, ids 0-67) so a cat can never share an id with a deck/hand/discard
+// card. Sleeping cats and deck cards render simultaneously in the same game
+// and both key their Framer Motion `layoutId` off `card-${id}` (Card.jsx/
+// CardBack.jsx) — a colliding id made two unrelated cards share one
+// layoutId, and Framer Motion silently dropped one of them from rendering.
+const CAT_ID_OFFSET = 1000;
+
 export function createCats() {
   const roster = [
-    { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
-    { name: "Ginger Tom", points: 15, pairKey: "gingerTom" },
+    { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 1 },
+    { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 2 },
     { name: "Maine Coon", points: 20 },
     { name: "Calico", points: 15 },
     { name: "Persian", points: 15 },
@@ -99,7 +120,7 @@ export function createCats() {
     { name: "Bengal", points: 5 }
   ];
 
-  return roster.map((cat, id) => ({ type: "cat", id, ...cat }));
+  return roster.map((cat, i) => ({ type: "cat", id: CAT_ID_OFFSET + i, ...cat }));
 }
 
 // The 12 cats are dealt face-down into fixed slots, like the physical game's
@@ -200,23 +221,46 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
 
-  drawCard(game, player);
-
   // Wake the chosen sleeping Cat and give it to the player
   const cat = wakeCatAtSlot(game, slotIndex);
   const joined = giveCatToPlayer(game, player, cat);
-  const grantsBonus = joined && cat.wakesBonus && getAvailableSlots(game).length > 0;
-  const wakeMessage = !joined
-    ? { playerId, kind: "wokeCatConflict", catName: cat.name }
-    : grantsBonus
-    ? { playerId, kind: "wokeBonusCat", catName: cat.name }
-    : { playerId, kind: "wokeCat", catName: cat.name };
+
+  // Guard Dog's effect is on this specific cat only — never on whatever
+  // cat a chained bonus wake picks up afterward (see respondToWakeChoice).
+  if (joined && card.dogEffect === "guard") {
+    cat.guarded = true;
+  }
+
+  // Hot Dog guarantees a second wake, same mechanism as the Sphynx's own
+  // wakesBonus trait (a chained pendingWakeChoice) — the two can stack if a
+  // Hot Dog happens to wake the Sphynx itself, granting a third.
+  const sphynxBonus = joined && cat.wakesBonus && getAvailableSlots(game).length > 0;
+  const hotDogBonus = joined && card.dogEffect === "hotdog" && getAvailableSlots(game).length > 0;
+  const grantsBonus = sphynxBonus || hotDogBonus;
+
+  let wakeMessage;
+  if (!joined) {
+    wakeMessage = { playerId, kind: "wokeCatConflict", catName: cat.name };
+  } else if (card.dogEffect === "guard") {
+    wakeMessage = { playerId, kind: "wokeGuardedCat", catName: cat.name, bonus: grantsBonus };
+  } else if (card.dogEffect === "hotdog") {
+    wakeMessage = { playerId, kind: "hotDogWoke", catName: cat.name, bonus: grantsBonus };
+  } else if (grantsBonus) {
+    wakeMessage = { playerId, kind: "wokeBonusCat", catName: cat.name };
+  } else {
+    wakeMessage = { playerId, kind: "wokeCat", catName: cat.name };
+  }
   game.sfxEvents.push(joined ? "wakeCat" : "gingerTomBackToSleep");
+  // Drawing the replacement card happens after the wake sound is queued
+  // (not before) so "dealCard" doesn't occupy the first, immediate stagger
+  // slot ahead of it — the wake sound is the one that should read as instant.
+  drawCard(game, player);
 
   if (grantsBonus) {
     game.pendingWakeChoice = { playerId, bonus: true, actorId: playerId };
     game.lastMessage = wakeMessage;
-    console.log(`${cat.name} lets Player ${playerId} wake one more sleeping cat!`);
+    const grantedBy = hotDogBonus ? "Hot Dog" : cat.name;
+    console.log(`${grantedBy} lets Player ${playerId} wake one more sleeping cat!`);
     return game; // wait for respondToWakeChoice — turn does not advance yet
   }
 
@@ -248,6 +292,11 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
 
   if (!targetPlayer || !targetPlayer.cats[targetCatIndex]) {
     console.log("Target player has no such cat to steal!");
+    return game;
+  }
+
+  if (targetPlayer.cats[targetCatIndex].guarded) {
+    console.log("That cat is guarded by a Guard Dog — it can't be stolen!");
     return game;
   }
 
@@ -304,6 +353,11 @@ export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatI
 
   if (!targetPlayer || !targetPlayer.cats[targetCatIndex]) {
     console.log("Target player has no such cat to put to sleep!");
+    return game;
+  }
+
+  if (targetPlayer.cats[targetCatIndex].guarded) {
+    console.log("That cat is guarded by a Guard Dog — it can't be put back to sleep!");
     return game;
   }
 
@@ -507,6 +561,12 @@ export function finishTurn(game, lastMessage = null) {
   const winnerId = checkWinner(game);
   if (winnerId !== null) {
     game.winner = winnerId;
+    // Every finishTurn caller has already reset/populated sfxEvents for its
+    // own action (per the "reset after validation, not unconditionally"
+    // pattern — see playDog) before reaching here, so this just appends to
+    // whatever's already queued for this action, same as drawCard/
+    // reshuffleDiscardIntoDeck do.
+    game.sfxEvents?.push("win");
     console.log(`Player ${winnerId} wins!`);
     return;
   }

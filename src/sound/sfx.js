@@ -1,4 +1,4 @@
-import { getMuted, subscribeMuted } from "./soundSettings.js";
+import { getSfxVolume, subscribeSfxVolume } from "./soundSettings.js";
 
 // One sound file per card/event, served statically from public/sounds/. Maps
 // the engine's sfxEvents keys (see engine.js) to filenames. mp3 (not the
@@ -12,7 +12,8 @@ const SOUND_FILES = {
   seagull: "Seagull.mp3",
   catnip: "Catnip.mp3",
   snail: "Snail.mp3",
-  laser: "Laser Pointer2.mp3"
+  laser: "Laser Pointer2.mp3",
+  win: "Applause.mp3"
 };
 
 // Cache one base <audio> per sound; cloneNode() on every play so the same
@@ -27,8 +28,10 @@ function getBaseAudio(key) {
 }
 
 export function playSfx(key) {
-  if (!SOUND_FILES[key] || getMuted()) return;
+  const volume = getSfxVolume();
+  if (!SOUND_FILES[key] || volume === 0) return;
   const instance = getBaseAudio(key).cloneNode();
+  instance.volume = volume;
   // Autoplay can be blocked before the user has interacted with the page at
   // all — that's expected on first load, not an error worth surfacing.
   instance.play().catch(() => {});
@@ -61,8 +64,10 @@ function getClockAudio() {
 }
 
 export function startClockTick() {
-  if (getMuted()) return;
+  const volume = getSfxVolume();
+  if (volume === 0) return;
   const audio = getClockAudio();
+  audio.volume = volume;
   audio.currentTime = 0;
   audio.play().catch(() => {});
 }
@@ -73,9 +78,28 @@ export function stopClockTick() {
   clockAudio.currentTime = 0;
 }
 
-// The clock tick is the one looping (not one-shot) sound, so muting mid-
-// countdown needs to actively cut it off rather than just suppressing future
-// plays — otherwise it would keep looping until the countdown itself ends.
-subscribeMuted(muted => {
-  if (muted) stopClockTick();
+// The clock tick is the one looping (not one-shot) sound, so a live volume
+// change needs to actively apply mid-countdown rather than just affecting
+// future plays — otherwise a drag to 0 would keep looping until the
+// countdown itself ends.
+subscribeSfxVolume(volume => {
+  if (!clockAudio) return;
+  if (volume === 0) {
+    stopClockTick();
+  } else {
+    clockAudio.volume = volume;
+  }
 });
+
+// Warms the browser's cache for every sound effect (and the clock tick) as
+// soon as the app loads, so the first real play of each doesn't have to wait
+// on a fresh network fetch + decode. "dealCard" plays constantly, so it's
+// always warm by the time it matters regardless — but most other sounds
+// (Fish, Seagull, Laser Pointer2, the very first "shuffle" of a session,
+// etc.) only play occasionally, each considerably bigger than the tiny
+// Deal Card clip, so a cold first play noticeably lags behind the action
+// that triggered it without this.
+export function preloadSfx() {
+  Object.keys(SOUND_FILES).forEach(getBaseAudio);
+  getClockAudio();
+}

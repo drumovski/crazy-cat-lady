@@ -22,13 +22,22 @@ import SetupScreen from "./components/SetupScreen.jsx";
 import OnlineSetup from "./components/OnlineSetup.jsx";
 import GameBoard from "./components/GameBoard.jsx";
 import { preloadCardImages } from "./components/preloadCardImages.js";
+import { startMusic } from "./sound/music.js";
+import { preloadSfx } from "./sound/sfx.js";
 import "./App.css";
 
-// Fires once, as soon as this module loads (menu screen, before any game
-// exists) — starts warming the browser's image cache for the whole deck so
-// the first hand a player actually sees is already cached rather than
-// fetching each card's art fresh.
+// All three fire once, as soon as this module loads (menu screen, before any
+// game exists) — preloadCardImages/preloadSfx warm the browser's cache for
+// the card art and sound effects respectively, so the first hand a player
+// sees and the very first "shuffle" of the session are already cached
+// instead of fetching fresh (a cold fetch of a sound effect noticeably lags
+// behind the action that triggered it — see sfx.js). startMusic begins the
+// background music playlist; it's a standalone module-level player (see
+// music.js), not tied to any screen, so it keeps playing across menu ->
+// setup -> game -> New Game without restarting.
 preloadCardImages();
+preloadSfx();
+startMusic();
 
 export default function App() {
   const [screen, setScreen] = useState("menu"); // 'menu' | 'local' | 'online'
@@ -38,10 +47,19 @@ export default function App() {
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
   const [playerNames, setPlayerNames] = useState([]);
   const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
+  // The raw per-seat name inputs from SetupScreen (not the resolved
+  // game-ready names above — no "Player N"/AI-name substitution) — kept
+  // across backToMenu (deliberately not reset there) so a player's typed
+  // name pre-fills the form again on their next game instead of coming back
+  // blank. Seeded once here rather than in SetupScreen's own state so it
+  // survives that component fully unmounting between games.
+  const [savedPlayerNameInputs, setSavedPlayerNameInputs] = useState(["", "", "", "", ""]);
 
   // Online state
   const [onlineSession, setOnlineSession] = useState(null); // { roomName, playerId }
   const [roomState, setRoomState] = useState(null); // latest payload from the server
+  // Same idea as savedPlayerNameInputs, for OnlineSetup's single "Your name" field.
+  const [savedOnlineName, setSavedOnlineName] = useState("");
 
   function applyAction(actionFn, ...args) {
     setGame(prevGame => ({ ...actionFn(prevGame, ...args) }));
@@ -128,6 +146,9 @@ export default function App() {
     setBlockTimerSeconds(DEFAULT_BLOCK_TIMER_SECONDS);
     setOnlineSession(null);
     setRoomState(null);
+    // savedPlayerNameInputs/savedOnlineName are deliberately NOT reset here —
+    // the whole point is for a typed name to survive into the next game
+    // instead of coming back blank.
   }
 
   if (screen === "menu") {
@@ -138,10 +159,12 @@ export default function App() {
     if (!game) {
       return (
         <SetupScreen
-          onStart={(numPlayers, aiIds, names, timerSeconds) => {
+          initialNames={savedPlayerNameInputs}
+          onStart={(numPlayers, aiIds, names, timerSeconds, rawNames) => {
             setAiPlayerIds(aiIds);
             setPlayerNames(names);
             setBlockTimerSeconds(timerSeconds);
+            setSavedPlayerNameInputs(rawNames);
             setGame(createGame(numPlayers));
           }}
         />
@@ -175,7 +198,14 @@ export default function App() {
 
   // screen === "online"
   if (!onlineSession || !roomState || roomState.status !== "playing") {
-    return <OnlineSetup onReady={handleOnlineReady} onBack={backToMenu} />;
+    return (
+      <OnlineSetup
+        onReady={handleOnlineReady}
+        onBack={backToMenu}
+        initialName={savedOnlineName}
+        onNameChange={setSavedOnlineName}
+      />
+    );
   }
 
   const { roomName, playerId: myPlayerId } = onlineSession;

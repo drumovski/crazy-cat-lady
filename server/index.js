@@ -22,8 +22,19 @@ function roomState(room) {
   };
 }
 
-function broadcastRoom(room) {
-  io.to(room.roomName).emit("roomState", roomState(room));
+// excludeSocket lets the create/join handlers below skip re-delivering the
+// same state to the socket that just got it via their ack callback —
+// without this, that socket would receive the freshly-created game (whose
+// sfxEvents, e.g. ["shuffle", ...N x "dealCard"], is what actually plays
+// sound) via two independently-serialized copies. Since online broadcasts
+// re-serialize into fresh object/array references every time (see the
+// blockTimerSeconds comment in GameBoard.jsx), the client's sfx-batch dedupe
+// — which compares game.sfxEvents by reference — can't tell those two
+// copies apart, so it played the same "shuffle" (and every deal-card ding)
+// twice, audibly overlapping.
+function broadcastRoom(room, excludeSocket) {
+  const emitter = excludeSocket ? excludeSocket.to(room.roomName) : io.to(room.roomName);
+  emitter.emit("roomState", roomState(room));
 }
 
 io.on("connection", socket => {
@@ -52,8 +63,10 @@ io.on("connection", socket => {
     // listening for "roomState" after processing the ack (a render/effect
     // later) would otherwise miss that broadcast and be stuck waiting
     // forever. Handing over the state directly in the ack closes that race.
+    // broadcastRoom excludes this socket (see its comment) since this ack
+    // already delivered the same state to it.
     callback({ roomName: room.roomName, playerId, ...roomState(room) });
-    broadcastRoom(room);
+    broadcastRoom(room, socket);
     scheduleNextStep(room, () => broadcastRoom(room));
   });
 
@@ -66,7 +79,7 @@ io.on("connection", socket => {
 
     socket.join(result.room.roomName);
     callback({ roomName: result.room.roomName, playerId: result.playerId, ...roomState(result.room) });
-    broadcastRoom(result.room);
+    broadcastRoom(result.room, socket);
     scheduleNextStep(result.room, () => broadcastRoom(result.room));
   });
 

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
 import CardBack from "./CardBack.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
 import RulesModal from "./RulesModal.jsx";
-import SoundToggle from "./SoundToggle.jsx";
+import SoundSettings from "./SoundSettings.jsx";
 import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
@@ -15,6 +16,16 @@ import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
 //   'catnip-target'-> next: click any opponent's cat directly to put it to sleep
 // Re-clicking the originally-selected hand card cancels out of any mode.
 const EMPTY_SELECTION = {};
+
+// Hand cards fall in from roughly where the draw pile sits (above the hand)
+// and, on discard/play, fall back out the same way — rather than Card.jsx's
+// default in-place pop, which doesn't read as "coming from"/"going to"
+// anywhere in particular.
+const HAND_CARD_VARIANTS = {
+  initial: { opacity: 0, y: -60, scale: 0.7 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -60, scale: 0.7 }
+};
 
 const CARD_TYPE_LABELS = {
   dog: "Dog",
@@ -70,6 +81,14 @@ function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
       return `${who} woke a ${message.catName} Cat!`;
     case "wokeBonusCat":
       return `${who} woke the ${message.catName} Cat so ${isSelf ? "you" : "they"} can wake another Cat!`;
+    case "wokeGuardedCat":
+      return message.bonus
+        ? `${who} woke a guarded ${message.catName} Cat — it can't be stolen or put to sleep — and gets to wake another Cat!`
+        : `${who} woke a guarded ${message.catName} Cat — it can't be stolen or put to sleep!`;
+    case "hotDogWoke":
+      return message.bonus
+        ? `${who} played Hot Dog, waking a ${message.catName} Cat — and gets to wake another Cat!`
+        : `${who} played Hot Dog, waking a ${message.catName} Cat!`;
     case "wokeCatConflict":
       return `${who} tried to wake ${message.catName}, but already had a matching cat — it went back to sleep.`;
     case "discarded":
@@ -116,16 +135,6 @@ function RefreshIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 12a9 9 0 0 1 15.5-6.3M21 12a9 9 0 0 1-15.5 6.3" />
       <path d="M18 3v4h-4M6 21v-4h4" />
-    </svg>
-  );
-}
-
-function CatEarIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 8 L7 3 L9 8" />
-      <path d="M20 8 L17 3 L15 8" />
-      <path d="M4 8 C4 15 8 19 12 19 C16 19 20 15 20 8 C20 8 16 10 12 10 C8 10 4 8 4 8 Z" />
     </svg>
   );
 }
@@ -396,12 +405,9 @@ export default function GameBoard({
           <button type="button" className="icon-button" onClick={() => setShowHelp(v => !v)} title="Help">
             <HelpIcon />
           </button>
-          <SoundToggle />
+          <SoundSettings />
         </div>
-        <div className="room-pill">
-          <CatEarIcon />
-          <span>Crazy Cat Lady</span>
-        </div>
+        <h1 className="board-title">Crazy Cat Lady</h1>
         <button type="button" className="icon-button" onClick={onNewGame} title="New Game">
           <RefreshIcon />
         </button>
@@ -448,7 +454,6 @@ export default function GameBoard({
             key={player.id}
             player={player}
             name={getName(player.id)}
-            isAi={aiPlayerIds.includes(player.id)}
             isCurrentTurn={player.id === game.currentPlayerIndex}
             catsSelectable={
               canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
@@ -492,15 +497,48 @@ export default function GameBoard({
             role={canDiscardViaPile ? "button" : undefined}
             tabIndex={canDiscardViaPile ? 0 : undefined}
           >
-            {topDiscard ? (
-              // A disabled Card (no onClick) silently swallows clicks instead
-              // of letting them bubble to the pile-group's handler above, so
-              // it needs its own (no-op) onClick to stay non-disabled and
-              // let clicking the card itself trigger the discard too.
-              <Card card={topDiscard} size="board" onClick={canDiscardViaPile ? () => {} : undefined} />
-            ) : (
-              <div className="card card-size-board sleeping-slot-empty" />
-            )}
+            {/* AnimatePresence here so the *previous* top-of-pile card gets
+                to play its exit animation when a new one replaces it
+                (buried card fading out), instead of being swapped for the
+                new one instantly — without it, only a card that's newly
+                mounted (there was nothing before it) would ever animate.
+                The wrapping .discard-pile-slot (fixed size, position:
+                relative) plus `position: absolute` on every child (see
+                App.css) makes the exiting and entering card overlap in
+                place instead of stacking in normal flow — mode="popLayout"
+                (the hand fan's fix for the same class of problem) doesn't
+                reliably apply here, since this exiting card is also mid
+                cross-tree layoutId flight (from wherever it was played
+                from), which fights its exit-repositioning logic and leaves
+                it position:relative, so the pile-group briefly holds two
+                stacked card-heights and grows .center-board, shoving
+                everything below it (Your Cats, message log, hand) down and
+                back. A fixed-size slot with absolutely-positioned children
+                sidesteps that entirely, regardless of how many cards
+                AnimatePresence has mounted at once. */}
+            <div className="discard-pile-slot">
+              <AnimatePresence>
+                {topDiscard ? (
+                  // A disabled Card (no onClick) silently swallows clicks
+                  // instead of letting them bubble to the pile-group's
+                  // handler above, so it needs its own (no-op) onClick to
+                  // stay non-disabled and let clicking the card itself
+                  // trigger the discard too. Keyed by the card's own id
+                  // (not just always "the top of the pile") so a new card
+                  // landing here re-mounts and replays its pop-in
+                  // animation, instead of Framer Motion treating it as the
+                  // same element with only its props updated.
+                  <Card
+                    key={topDiscard.id}
+                    card={topDiscard}
+                    size="board"
+                    onClick={canDiscardViaPile ? () => {} : undefined}
+                  />
+                ) : (
+                  <div className="card card-size-board sleeping-slot-empty" />
+                )}
+              </AnimatePresence>
+            </div>
             <span className="pile-label">Discard · {game.discardPile.length}</span>
           </div>
         </div>
@@ -519,49 +557,77 @@ export default function GameBoard({
           {isOnline ? "Your Cats" : `${getName(revealSeat)}'s Cats`}
         </span>
         <div className="your-cats-row">
-          {revealedPlayer.cats.map(cat => (
-            <Card key={cat.id} card={cat} size="hand" />
-          ))}
+          <AnimatePresence>
+            {revealedPlayer.cats.map(cat => (
+              <Card key={cat.id} card={cat} size="hand" />
+            ))}
+          </AnimatePresence>
           {revealedPlayer.cats.length === 0 && <span className="your-cats-empty">No cats yet</span>}
         </div>
       </div>
 
       <div className="message-log">
-        {messageHistory.length === 0 ? (
-          <span className="message-log-empty">No moves yet.</span>
-        ) : (
-          messageHistory.map((text, i) => (
-            <div className="message-log-row" key={i}>
-              <span className="message-log-emoji">🐱</span>
-              <span className="message-log-text">{text}</span>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="hand-fan">
-        {revealedPlayer.hand.map((card, cardIndex) => {
-          const isInteractive = canInteract;
-          const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
-          // Keyed by the card's own stable id, not its current index — a
-          // played/discarded card splices out and shifts every later card's
-          // index down, which would otherwise make React (and later, Framer
-          // Motion's layout animation) think the card at each shifted index
-          // changed identity instead of just moving.
-          return (
-            <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
-              <div style={{ transform: style.transform }}>
-                <Card
-                  card={card}
-                  size="hand"
-                  selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
-                  eligible={blockCounterType !== null && card.type === blockCounterType}
-                  onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
-                />
+        {/* Always renders all 3 row slots (rather than only as many as
+            messageHistory currently has) so the log's height is reserved
+            up front — otherwise it visibly grows for the first 3 actions
+            of a game, pushing the hand fan below it down each time. Slots
+            with no message yet render a hidden (but height-reserving)
+            placeholder, except slot 0, which shows "No moves yet." until
+            the first real message arrives. */}
+        {[0, 1, 2].map(i => {
+          const text = messageHistory[i];
+          if (text) {
+            return (
+              <div className="message-log-row" key={i}>
+                <span className="message-log-text">{text}</span>
               </div>
+            );
+          }
+          if (i === 0) {
+            return (
+              <div className="message-log-row" key={i}>
+                <span className="message-log-empty">No moves yet.</span>
+              </div>
+            );
+          }
+          return (
+            <div className="message-log-row message-log-row-hidden" key={i}>
+              <span className="message-log-text">&nbsp;</span>
             </div>
           );
         })}
+      </div>
+
+      <div className="hand-fan">
+        {/* popLayout: an exiting (played/discarded) card is pulled out of
+            layout flow immediately, so its siblings re-fan smoothly while
+            it's still finishing its own exit animation, rather than holding
+            the fan's width/spacing until the exit completes. */}
+        <AnimatePresence mode="popLayout">
+          {revealedPlayer.hand.map((card, cardIndex) => {
+            const isInteractive = canInteract;
+            const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
+            // Keyed by the card's own stable id, not its current index — a
+            // played/discarded card splices out and shifts every later card's
+            // index down, which would otherwise make React (and Framer
+            // Motion's layout animation) think the card at each shifted index
+            // changed identity instead of just moving.
+            return (
+              <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
+                <div style={{ transform: style.transform }}>
+                  <Card
+                    card={card}
+                    size="hand"
+                    selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
+                    eligible={blockCounterType !== null && card.type === blockCounterType}
+                    onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
+                    variants={HAND_CARD_VARIANTS}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,3 +1,8 @@
+import { motion } from "framer-motion";
+import { CARD_FLY_DURATION_S } from "../game/timings.js";
+
+const FLY_TRANSITION = { duration: CARD_FLY_DURATION_S, ease: "easeOut" };
+
 // Paw print — used on the "cat" variant (sleeping cats).
 function PawIcon() {
   return (
@@ -32,7 +37,16 @@ function BallIcon() {
 // sleeping cat — so the shared `.card:disabled` dimming still applies),
 // otherwise a plain non-interactive div (the draw pile, which is never
 // clickable at all).
-export default function CardBack({ variant, size = "board", selectable, onClick, disabled, title }) {
+//
+// `layoutId`, when passed (sleeping-cat slots only — see SleepingCatsGrid;
+// the draw pile never passes one, since it's face-down/anonymous with no
+// specific-card identity to share), lets a cat's face-down back visually
+// morph and fly into its face-up Card the moment it's woken (Card.jsx uses
+// the exact same `card-${cat.id}` id), and the reverse when Catnip puts it
+// back to sleep — same shared-layout-animation mechanism as cards flying
+// between hand/discard/collections, just crossing the CardBack/Card
+// component boundary too.
+export default function CardBack({ variant, size = "board", selectable, onClick, disabled, title, layoutId }) {
   const classes = `card card-size-${size} card-back card-back-${variant}${selectable ? " card-selectable" : ""}`;
   const decoration = (
     <>
@@ -43,18 +57,32 @@ export default function CardBack({ variant, size = "board", selectable, onClick,
       <span className="card-back-badge">{variant === "cat" ? <PawIcon /> : <BallIcon />}</span>
     </>
   );
+  const motionProps = {
+    layoutId,
+    initial: { opacity: 0, scale: 0.5 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.5 },
+    transition: FLY_TRANSITION
+  };
 
   if (disabled !== undefined) {
     return (
-      <button type="button" className={classes} onClick={onClick} disabled={disabled} title={title}>
+      <motion.button
+        {...motionProps}
+        type="button"
+        className={classes}
+        onClick={onClick}
+        disabled={disabled}
+        title={title}
+      >
         {decoration}
-      </button>
+      </motion.button>
     );
   }
 
   return (
-    <div className={classes} title={title}>
+    <motion.div {...motionProps} className={classes} title={title}>
       {decoration}
-    </div>
+    </motion.div>
   );
 }

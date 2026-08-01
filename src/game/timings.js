@@ -9,3 +9,9 @@
 // grows to cover once Framer Motion is wired in.
 export const AI_THINK_DELAY_MS = 700;
 export const LASER_REVEAL_DELAY_MS = 2000;
+
+// How long a card's fly/pop animation takes (Card.jsx's Framer Motion
+// layout + enter/exit transitions) — in seconds, since that's the unit
+// Framer Motion's `transition.duration` expects, unlike the two ms
+// constants above.
+export const CARD_FLY_DURATION_S = 0.35;

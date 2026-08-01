@@ -1,8 +1,18 @@
+/* Fluid scaling — every size below that used to jump at a single 768px
+   breakpoint (mobile size, then straight to desktop size) now scales
+   continuously with viewport width instead, via clamp(min, preferred, max)
+   where `preferred` is a linear function of `vw`. Interpolation range is
+   360px (small phone) to 900px (.game-board's own 960px cap makes further
+   growth beyond that moot) — same range used for every clamp() in this file
+   so everything scales together proportionally rather than at uneven rates.
+   min/max below are exactly the old mobile-base/desktop-media-query values,
+   so the look at both ends of the range is unchanged; only the transition
+   between them is new. */
 #root {
   width: 100%;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding: clamp(0px, calc(40px - 4.444vw), 24px) 16px clamp(0px, calc(80px - 8.889vw), 48px);
   text-align: left;
 }
 
@@ -42,7 +52,7 @@ button {
   position: relative;
   text-align: center;
   margin: 0 auto;
-  max-width: 420px;
+  max-width: clamp(420px, calc(353.333px + 18.519vw), 520px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -55,17 +65,71 @@ button {
   left: 12px;
 }
 .setup-screen h1 {
-  font-size: 32px;
+  font-size: clamp(32px, calc(26.667px + 1.481vw), 40px);
   letter-spacing: normal;
   line-height: 130%;
   margin: 0;
+}
+
+/* Menu screen (ModeSelect) — its own wrapper, distinct from .setup-screen,
+   because the hero image is allowed to grow wider than the narrow button
+   column beneath it (.menu-content keeps the old .setup-screen width for
+   that column) rather than being capped to it. */
+.menu-screen {
+  position: relative;
+  text-align: center;
+  margin: 0 auto;
+  /* This is the hero's own scale — grows further on bigger screens than the
+     button column does. Native art is 1408x768, so even at this cap (900px)
+     there's still 2x/retina headroom. */
+  max-width: clamp(520px, calc(266.667px + 70.37vw), 900px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  /* Higher up than .setup-screen's 15vh — the hero image is the page's
+     visual anchor, it shouldn't sit far down the viewport. Enough clearance
+     above it that the absolutely-positioned sound button (top: 12px, up to
+     38px tall) doesn't overlap the image. */
+  padding-top: 56px;
+}
+/* Real text, not baked into the hero art (the art is now textless,
+   "Load Screen no Text.png") — large and black per the design, in the same
+   self-hosted Henny Penny font as the in-game board title. */
+.menu-title {
+  margin: 0;
+  font-family: var(--title-font);
+  font-weight: 400;
+  font-size: clamp(40px, calc(18.667px + 5.926vw), 72px);
+  line-height: 110%;
+  color: #000;
+}
+/* The hero image is meant to sit directly on the page (no card-style
+   frame/border/shadow), so this just sizes it. */
+.menu-hero {
+  width: 100%;
+  margin: 0;
+  line-height: 0;
+}
+.menu-hero img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.menu-content {
+  width: 100%;
+  max-width: clamp(420px, calc(353.333px + 18.519vw), 520px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 .setup-field {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 16px;
+  font-size: clamp(16px, calc(14.667px + 0.37vw), 18px);
 }
 .setup-field select {
   font: inherit;
@@ -78,7 +142,7 @@ button {
 
 .setup-hint {
   color: var(--text);
-  font-size: 14px;
+  font-size: clamp(14px, calc(11.333px + 0.741vw), 18px);
 }
 
 .setup-player-list {
@@ -113,7 +177,7 @@ button {
 }
 
 .room-name-display {
-  font-size: 28px;
+  font-size: clamp(28px, calc(24px + 1.111vw), 34px);
   font-weight: bold;
   letter-spacing: 1px;
   color: var(--accent);
@@ -128,7 +192,7 @@ button {
 
 .room-name-input {
   font: inherit;
-  font-size: 16px;
+  font-size: clamp(16px, calc(14.667px + 0.37vw), 18px);
   text-align: center;
   width: 180px;
   padding: 6px 10px;
@@ -140,7 +204,7 @@ button {
 
 .name-input {
   font: inherit;
-  font-size: 16px;
+  font-size: clamp(16px, calc(14.667px + 0.37vw), 18px);
   padding: 6px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -157,15 +221,34 @@ button {
 /* Game board */
 .game-board {
   background: var(--felt-gradient);
-  padding: 14px;
+  padding: clamp(14px, calc(4.667px + 2.593vw), 28px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: clamp(12px, calc(8px + 1.111vw), 18px);
   color: var(--cat-snow);
-  max-width: 480px;
+  max-width: clamp(480px, calc(160px + 88.889vw), 960px);
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  /* #root is a flex column (see index.css) — grow to fill available height
+     rather than leaving empty space below on a tall viewport. */
+  flex: 1;
+}
+/* On a small phone viewport, the felt should run edge-to-edge with no cream
+   border showing — #root's own horizontal padding is a flat 16px (not
+   fluid, unlike its top/bottom padding above), so cancel it out here via a
+   matching negative margin rather than touching #root's padding globally
+   (that padding is still needed elsewhere — .setup-screen/.menu-content
+   have no horizontal padding of their own and rely on it). This is a binary
+   layout switch (edge-to-edge or not), not a continuously-scaling size, so
+   a hard breakpoint is used instead of the clamp() approach above. */
+@media (max-width: 600px) {
+  .game-board {
+    margin-left: -16px;
+    margin-right: -16px;
+    width: calc(100% + 32px);
+    max-width: none;
+  }
 }
 
 .board-header {
@@ -181,8 +264,8 @@ button {
 }
 
 .icon-button {
-  width: 28px;
-  height: 28px;
+  width: clamp(28px, calc(21.333px + 1.852vw), 38px);
+  height: clamp(28px, calc(21.333px + 1.852vw), 38px);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -196,45 +279,90 @@ button {
 .icon-button:hover {
   filter: brightness(0.97);
 }
+.icon-button svg,
+.win-pill svg {
+  width: clamp(14px, calc(11.333px + 0.741vw), 18px);
+  height: clamp(14px, calc(11.333px + 0.741vw), 18px);
+}
 
-.room-pill,
 .win-pill {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  background: var(--cat-snow);
+  align-self: center;
+  gap: clamp(6px, calc(4.667px + 0.37vw), 8px);
+  background: var(--accent-2-bg);
   color: var(--text-h);
   border-radius: 999px;
-  padding: 6px 16px;
-  font-size: 13px;
-  font-weight: 600;
+  padding: clamp(6px, calc(4px + 0.556vw), 9px) clamp(16px, calc(12px + 1.111vw), 22px);
+  font-weight: 400;
+  font-size: clamp(12.5px, calc(10.167px + 0.648vw), 16px);
   box-shadow: var(--shadow);
   white-space: nowrap;
 }
-.win-pill {
-  align-self: center;
-  background: var(--accent-2-bg);
-  color: var(--text-h);
+
+/* Board header's "Crazy Cat Lady" — plain decorative text, no icon or pill
+   background (replaces the old .room-pill treatment), sitting directly on
+   the felt like your-cats-label/pile-label already do. */
+.board-title {
+  margin: 0;
+  font-family: var(--title-font);
   font-weight: 400;
-  font-size: 12.5px;
+  font-size: clamp(18px, calc(11.556px + 1.778vw), 26px);
+  color: var(--cat-snow);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
 }
 
 .help-popover {
   background: var(--cat-snow);
   color: var(--text-h);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: clamp(12px, calc(8px + 1.111vw), 18px) clamp(14px, calc(10px + 1.111vw), 20px);
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  font-size: 13.5px;
+  gap: clamp(10px, calc(7.333px + 0.741vw), 14px);
+  font-size: clamp(13.5px, calc(11.833px + 0.463vw), 16px);
   line-height: 1.4;
+  max-width: 480px;
+  margin: 0 auto;
 }
 .help-popover-actions {
   display: flex;
   gap: 8px;
+}
+
+.sound-settings {
+  position: relative;
+  display: inline-flex;
+}
+.sound-settings-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  z-index: 20;
+  background: var(--cat-snow);
+  color: var(--text-h);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 150px;
+}
+.sound-settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.sound-settings-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
 }
 
 .rules-overlay {
@@ -311,25 +439,32 @@ button {
 
 .opponents-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(clamp(140px, calc(113.333px + 7.407vw), 180px), 1fr));
+  gap: clamp(8px, calc(4px + 1.111vw), 14px);
 }
 
 .player-panel {
   border: none;
   border-radius: var(--radius-md);
-  padding: 8px 10px;
+  padding: clamp(8px, calc(4px + 1.111vw), 14px) clamp(10px, calc(6px + 1.111vw), 16px);
   background: var(--cat-snow);
   color: var(--cat-snow-text);
 }
+.player-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: clamp(6px, calc(3.333px + 0.741vw), 10px);
+  margin-bottom: clamp(6px, calc(3.333px + 0.741vw), 10px);
+}
 .player-panel-name {
-  margin: 0 0 2px;
-  font-size: 13px;
+  font-size: clamp(13px, calc(10.333px + 0.741vw), 17px);
   font-weight: 700;
   color: var(--text-h);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 @keyframes turnGlow {
   0%, 100% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
@@ -340,19 +475,24 @@ button {
 }
 
 .player-score {
-  font-size: 12px;
+  font-size: clamp(12px, calc(10px + 0.556vw), 15px);
   color: var(--text);
-  margin-bottom: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .player-cats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  min-height: 20px;
+  gap: clamp(4px, calc(1.333px + 0.741vw), 8px);
+  /* Reserves a full mini-cat-height row (card + its name label) up front,
+     rather than a guessed min-height, so an opponent's first collected cat
+     doesn't grow this panel and shift the grid row/board below it — see
+     .your-cats-row for the same fix on the "Your Cats" panel. */
+  min-height: calc(var(--card-h-mini) + var(--mini-cat-label-h));
 }
 .player-cats-empty {
-  font-size: 11px;
+  font-size: clamp(11px, calc(9px + 0.556vw), 14px);
   color: var(--text);
   font-style: italic;
 }
@@ -361,11 +501,18 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  width: 40px;
+  gap: clamp(2px, calc(0.667px + 0.37vw), 4px);
+  width: clamp(40px, calc(29.333px + 2.963vw), 56px);
+  /* Reserves worst-case (2-line name) height on every mini-cat, not just
+     the row as a whole — otherwise whichever cats happen to have a
+     wrap-eligible name (vs. a short one-line name) make their specific row
+     taller than others, and that varies as cats get collected/stolen, so
+     the opponent panel (and everything below it) visibly wobbles instead
+     of just growing once and settling. */
+  min-height: calc(var(--card-h-mini) + var(--mini-cat-label-h));
 }
 .mini-cat-name {
-  font-size: 8px;
+  font-size: clamp(8px, calc(6px + 0.556vw), 11px);
   line-height: 1.15;
   text-align: center;
   color: var(--text);
@@ -377,7 +524,7 @@ button {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  gap: 4px;
+  gap: clamp(4px, calc(1.333px + 0.741vw), 8px);
 }
 
 .block-timer-overlay {
@@ -393,7 +540,7 @@ button {
 }
 .block-timer-number {
   font-family: var(--heading);
-  font-size: 64px;
+  font-size: clamp(64px, calc(48px + 4.444vw), 88px);
   color: var(--cat-snow);
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
@@ -401,7 +548,7 @@ button {
 .pile-column {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(10px, calc(6px + 1.111vw), 16px);
   justify-content: center;
   flex-shrink: 0;
 }
@@ -409,8 +556,20 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: clamp(4px, calc(2.667px + 0.37vw), 6px);
   border-radius: var(--radius-sm);
+}
+.discard-pile-slot {
+  position: relative;
+  width: var(--card-w-board);
+  height: var(--card-h-board);
+}
+.discard-pile-slot > * {
+  /* Makes the exiting (buried) and entering discard card overlap in place
+     instead of stacking in normal flow while both are briefly mounted for
+     the crossfade — see the comment in GameBoard.jsx. */
+  position: absolute;
+  inset: 0;
 }
 @keyframes laserFlip {
   0% { transform: scaleX(0); }
@@ -427,35 +586,40 @@ button {
   background: rgba(15, 58, 30, 0.6);
 }
 .pile-label {
-  font-size: 10px;
+  font-size: clamp(10px, calc(8px + 0.556vw), 13px);
   color: var(--cat-snow);
   background: rgba(15, 58, 30, 0.4);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: clamp(2px, calc(0.667px + 0.37vw), 4px) clamp(8px, calc(5.333px + 0.741vw), 12px);
   white-space: nowrap;
 }
 
 .your-cats-panel {
   background: rgba(15, 58, 30, 0.4);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
-  min-height: 87px;
+  padding: clamp(10px, calc(6px + 1.111vw), 16px) clamp(12px, calc(8px + 1.111vw), 18px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: clamp(6px, calc(3.333px + 0.741vw), 10px);
 }
 .your-cats-label {
-  font-size: 12px;
+  font-size: clamp(12px, calc(10px + 0.556vw), 15px);
   font-weight: 700;
   color: var(--cat-snow);
 }
 .your-cats-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: clamp(6px, calc(3.333px + 0.741vw), 10px);
+  /* Reserves a full hand-card-height row up front (rather than a guessed
+     min-height on the panel as a whole) so the first collected cat doesn't
+     grow this panel and push the hand fan below it down — see .player-cats
+     for the same fix on opponent panels. */
+  min-height: var(--card-h-hand);
 }
 .your-cats-empty {
-  font-size: 12.5px;
+  font-size: clamp(12.5px, calc(10.167px + 0.648vw), 16px);
   color: var(--cat-snow);
   opacity: 0.7;
   font-style: italic;
@@ -470,11 +634,11 @@ button {
 .message-log {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: clamp(3px, calc(1.667px + 0.37vw), 5px);
   background: var(--cat-snow);
   color: var(--text-h);
   border-radius: var(--radius-md);
-  padding: 8px 12px;
+  padding: clamp(8px, calc(5.333px + 0.741vw), 12px) clamp(12px, calc(8px + 1.111vw), 18px);
   box-shadow: var(--shadow);
   min-height: 20px;
 }
@@ -483,24 +647,26 @@ button {
   align-items: center;
   gap: 6px;
 }
+.message-log-row-hidden {
+  /* Reserves its row's height (see the message-log JSX comment) without
+     showing anything — visibility:hidden rather than not rendering the row
+     at all, or display:none, either of which would collapse its height. */
+  visibility: hidden;
+}
 .message-log-row:nth-child(1) {
   opacity: 1;
-  font-size: 12.5px;
+  font-size: clamp(12.5px, calc(10.167px + 0.648vw), 16px);
 }
 .message-log-row:nth-child(2) {
   opacity: 0.7;
-  font-size: 11px;
+  font-size: clamp(11px, calc(9px + 0.556vw), 14px);
 }
 .message-log-row:nth-child(3) {
   opacity: 0.55;
-  font-size: 11px;
-}
-.message-log-emoji {
-  font-size: 14px;
-  flex-shrink: 0;
+  font-size: clamp(11px, calc(9px + 0.556vw), 14px);
 }
 .message-log-empty {
-  font-size: 12.5px;
+  font-size: clamp(12.5px, calc(10.167px + 0.648vw), 16px);
   color: var(--text);
   font-style: italic;
 }
@@ -509,7 +675,7 @@ button {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 10px 0 4px;
+  padding: clamp(10px, calc(6px + 1.111vw), 16px) 0 clamp(4px, calc(1.333px + 0.741vw), 8px);
 }
 .hand-fan-slot {
   transition: margin 0.15s ease;
@@ -568,7 +734,11 @@ button {
   gap: 2px;
   padding: 4px;
   flex-shrink: 0;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  /* transform is NOT transitioned here — Card.jsx (Framer Motion) now owns
+     all transform animation (layout re-flow, enter/exit pop, the
+     .card-selected/-eligible lift below); a CSS transition on the same
+     property would fight its per-frame inline updates. */
+  transition: box-shadow 0.15s ease;
 }
 .card:not(:disabled):hover {
   box-shadow: var(--shadow);
@@ -601,9 +771,26 @@ button {
   color: transparent;
   font-size: 0;
 }
+.card-guard-bars {
+  position: absolute;
+  inset: 6%;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.card-guard-bars span {
+  width: 10%;
+  background: rgba(70, 70, 70, 0.8);
+  border-radius: 2px;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
 .card-selected {
   border: 3px solid var(--accent);
-  transform: translateY(-14px);
+  /* The lift itself is applied via Card.jsx's Framer Motion `animate` prop
+     (a `y` offset), not a CSS transform here — an inline style set by
+     Framer Motion on every frame would just override a CSS transform on
+     the same property anyway (inline always wins over a stylesheet rule),
+     so the translateY has to live on the JS side to actually take effect. */
 }
 .card-selectable {
   border: 3px solid var(--accent);
@@ -611,12 +798,11 @@ button {
 .card-eligible {
   outline: 2px dashed var(--accent-border);
   outline-offset: 2px;
-  transform: translateY(-8px);
 }
 
-.card-size-mini { width: 24px; }
-.card-size-board { width: 42px; }
-.card-size-hand { width: 62px; }
+.card-size-mini { width: var(--card-w-mini); }
+.card-size-board { width: var(--card-w-board); }
+.card-size-hand { width: var(--card-w-hand); }
 
 .card-rank {
   position: absolute;
@@ -626,29 +812,55 @@ button {
   font-weight: 700;
   line-height: 1;
   color: var(--text-h);
-  font-size: 14px;
+  font-size: clamp(14px, calc(10.667px + 0.926vw), 19px);
 }
-.card-size-mini .card-rank { font-size: 9px; }
-.card-size-board .card-rank { font-size: 11px; }
+.card-size-mini .card-rank { font-size: clamp(9px, calc(6.333px + 0.741vw), 13px); }
+.card-size-board .card-rank { font-size: clamp(11px, calc(8.333px + 0.741vw), 15px); }
+.card-rank-cat {
+  font-family: var(--card-value-font);
+  /* IrishGrover-Regular only ships one weight — font-synthesis: none (set
+     globally in index.css) means a requested 700 wouldn't get faked bold
+     anyway, but this is more explicit than relying on that silently. */
+  font-weight: 400;
+  /* Cat art (unlike every other card type) has no point value baked in —
+     this overlay is the only thing showing it, and on busier illustrations
+     (especially at mini size, in opponents' collected-cats rows) plain text
+     could sit right on top of the art and get hard to read. A small white
+     backdrop fixes that regardless of what's underneath. Sized in em (not
+     px) so it scales with .card-rank's own per-size font-size (mini/board/
+     hand) automatically, and border-radius: 999px rather than 50% so it
+     stays a true circle for single-digit values but becomes a clean pill
+     instead of a squashed oval for the two-digit ones (10/15/20).
+     display: flex + justify/align-content center the digits in it. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  min-height: 1.7em;
+  padding: 0 0.2em;
+  border-radius: 999px;
+  background: var(--cat-snow);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 25%, transparent);
+}
 
 .card-emoji {
-  font-size: 20px;
+  font-size: clamp(20px, calc(14.667px + 1.481vw), 28px);
 }
-.card-size-mini .card-emoji { font-size: 12px; }
-.card-size-board .card-emoji { font-size: 16px; }
+.card-size-mini .card-emoji { font-size: clamp(12px, calc(8.667px + 0.926vw), 17px); }
+.card-size-board .card-emoji { font-size: clamp(16px, calc(12px + 1.111vw), 22px); }
 
 .card-label {
-  font-size: 9px;
+  font-size: clamp(9px, calc(6.333px + 0.741vw), 13px);
   color: var(--text);
   text-align: center;
   line-height: 1.1;
 }
-.card-size-board .card-label { font-size: 7.5px; }
+.card-size-board .card-label { font-size: clamp(7.5px, calc(5.5px + 0.556vw), 10.5px); }
 
 /* Card backs — 'cat' (teal, paw) for the sleeping-cats grid, 'deck'
    (purple, ball) for the main draw pile, matching the two hand-designed
    card backs. Decoration sizes/positions are in %, relative to the card's
-   own box, so the same rules work at every card-size breakpoint. */
+   own box, so the same rules work at every card size. */
 .card-back {
   position: relative;
   overflow: hidden;
@@ -706,9 +918,9 @@ button {
 
 .sleeping-grid {
   display: grid;
-  grid-template-columns: repeat(2, 42px);
+  grid-template-columns: repeat(2, clamp(42px, calc(30px + 3.333vw), 60px));
   grid-auto-rows: min-content;
-  gap: 6px;
+  gap: clamp(6px, calc(4px + 0.556vw), 9px);
   flex-shrink: 0;
 }
 
@@ -722,7 +934,7 @@ button {
 /* Win screen */
 .win-screen {
   text-align: center;
-  max-width: 420px;
+  max-width: clamp(420px, calc(353.333px + 18.519vw), 520px);
   margin: 15vh auto 0;
   display: flex;
   flex-direction: column;
@@ -737,201 +949,11 @@ button {
 .win-table th,
 .win-table td {
   border: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: clamp(8px, calc(5.333px + 0.741vw), 12px) clamp(12px, calc(9.333px + 0.741vw), 16px);
   text-align: center;
+  font-size: clamp(16px, calc(15.333px + 0.185vw), 17px);
 }
 .win-row-winner {
   background: var(--accent-bg);
   font-weight: bold;
-}
-
-/* Desktop scale-up — same layout as mobile, just bigger. Card widths,
-   fonts, and spacing all step up together so nothing looks stretched or
-   left behind at phone size on a wide screen. */
-@media (min-width: 768px) {
-  #root {
-    padding: 0 16px;
-  }
-
-  .setup-screen {
-    max-width: 520px;
-  }
-  .setup-screen h1 {
-    font-size: 40px;
-  }
-  .setup-field,
-  .setup-hint,
-  .room-name-input,
-  .name-input {
-    font-size: 18px;
-  }
-  .room-name-display {
-    font-size: 34px;
-  }
-
-  .win-screen {
-    max-width: 520px;
-  }
-  .win-table th,
-  .win-table td {
-    padding: 12px 16px;
-    font-size: 17px;
-  }
-
-  .game-board {
-    flex: 1;
-    max-width: 960px;
-    padding: 28px;
-    gap: 18px;
-  }
-
-  .icon-button {
-    width: 38px;
-    height: 38px;
-  }
-  .icon-button svg,
-  .room-pill svg,
-  .win-pill svg {
-    width: 18px;
-    height: 18px;
-  }
-  .room-pill,
-  .win-pill {
-    padding: 9px 22px;
-    font-size: 17px;
-    gap: 8px;
-  }
-  .win-pill {
-    font-size: 16px;
-  }
-  .help-popover {
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 18px 20px;
-    gap: 14px;
-    font-size: 16px;
-  }
-
-  .opponents-row {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
-  }
-  .player-panel {
-    padding: 14px 16px;
-  }
-  .player-panel-name {
-    font-size: 17px;
-  }
-  .player-score {
-    font-size: 15px;
-    margin-bottom: 10px;
-  }
-  .player-cats {
-    gap: 8px;
-    min-height: 30px;
-  }
-  .player-cats-empty {
-    font-size: 14px;
-  }
-  .mini-cat {
-    width: 56px;
-    gap: 4px;
-  }
-  .mini-cat-name {
-    font-size: 11px;
-  }
-
-  .center-board {
-    gap: 8px;
-  }
-  .block-timer-number {
-    font-size: 88px;
-  }
-  .pile-column {
-    gap: 16px;
-  }
-  .pile-group {
-    gap: 6px;
-  }
-  .pile-label {
-    font-size: 13px;
-    padding: 4px 12px;
-  }
-  .sleeping-grid {
-    grid-template-columns: repeat(2, 60px);
-    gap: 9px;
-  }
-
-  .your-cats-panel {
-    padding: 16px 18px;
-    min-height: 120px;
-    gap: 10px;
-  }
-  .your-cats-label {
-    font-size: 15px;
-  }
-  .your-cats-row {
-    gap: 10px;
-  }
-  .your-cats-empty {
-    font-size: 16px;
-  }
-
-  .message-log {
-    padding: 12px 18px;
-    gap: 5px;
-  }
-  .message-log-row:nth-child(1) {
-    font-size: 16px;
-  }
-  .message-log-row:nth-child(2) {
-    font-size: 14px;
-  }
-  .message-log-row:nth-child(3) {
-    font-size: 14px;
-  }
-  .message-log-emoji {
-    font-size: 18px;
-  }
-  .message-log-empty {
-    font-size: 16px;
-  }
-
-  .hand-fan {
-    padding: 16px 0 8px;
-  }
-
-  .card-size-mini {
-    width: 34px;
-  }
-  .card-size-board {
-    width: 60px;
-  }
-  .card-size-hand {
-    width: 90px;
-  }
-  .card-rank {
-    font-size: 19px;
-  }
-  .card-size-mini .card-rank {
-    font-size: 13px;
-  }
-  .card-size-board .card-rank {
-    font-size: 15px;
-  }
-  .card-emoji {
-    font-size: 28px;
-  }
-  .card-size-mini .card-emoji {
-    font-size: 17px;
-  }
-  .card-size-board .card-emoji {
-    font-size: 22px;
-  }
-  .card-label {
-    font-size: 13px;
-  }
-  .card-size-board .card-label {
-    font-size: 10.5px;
-  }
 }

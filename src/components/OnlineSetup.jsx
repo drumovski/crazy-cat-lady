@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoom, joinRoom, onRoomState } from "../multiplayer/socketClient.js";
 import { BLOCK_TIMER_MIN, BLOCK_TIMER_MAX, DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
+import MenuFrame from "./MenuFrame.jsx";
 
 const ROOM_NAME_MIN_LENGTH = 4;
 const ROOM_NAME_MAX_LENGTH = 16;
@@ -9,12 +10,19 @@ const BLOCK_TIMER_CHOICES = Array.from(
   (_, i) => BLOCK_TIMER_MIN + i
 );
 
-export default function OnlineSetup({ onReady, onBack }) {
+export default function OnlineSetup({ onReady, onBack, initialName = "", onNameChange }) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
   const [numAiOpponents, setNumAiOpponents] = useState(0);
   const [blockTimerSeconds, setBlockTimerSeconds] = useState(DEFAULT_BLOCK_TIMER_SECONDS);
-  const [playerName, setPlayerName] = useState("");
+  const [playerName, setPlayerNameState] = useState(initialName);
+  // Wraps the state setter to also report the change up to App.jsx, which
+  // persists it across backToMenu — so "Your name" pre-fills again next time
+  // instead of coming back blank.
+  function setPlayerName(value) {
+    setPlayerNameState(value);
+    onNameChange?.(value);
+  }
   const [roomNameInput, setRoomNameInput] = useState("");
   const [joinRoomName, setJoinRoomName] = useState("");
   const [error, setError] = useState(null);
@@ -78,22 +86,20 @@ export default function OnlineSetup({ onReady, onBack }) {
 
   if (room) {
     return (
-      <div className="setup-screen">
-        <h1>🐱 Crazy Cat Lady</h1>
+      <MenuFrame>
         <p>Waiting for other players to join…</p>
         <div className="room-name-display">{room.roomName}</div>
         <p className="setup-hint">Share this room name with the other players.</p>
         <button type="button" className="secondary-button" onClick={onBack}>
           Cancel
         </button>
-      </div>
+      </MenuFrame>
     );
   }
 
   if (mode === "create") {
     return (
-      <div className="setup-screen">
-        <h1>🐱 Crazy Cat Lady</h1>
+      <MenuFrame>
         <label className="setup-field">
           Your name
           <input
@@ -162,14 +168,13 @@ export default function OnlineSetup({ onReady, onBack }) {
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>
           Back
         </button>
-      </div>
+      </MenuFrame>
     );
   }
 
   if (mode === "join") {
     return (
-      <div className="setup-screen">
-        <h1>🐱 Crazy Cat Lady</h1>
+      <MenuFrame>
         <label className="setup-field">
           Your name
           <input
@@ -202,13 +207,12 @@ export default function OnlineSetup({ onReady, onBack }) {
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>
           Back
         </button>
-      </div>
+      </MenuFrame>
     );
   }
 
   return (
-    <div className="setup-screen">
-      <h1>🐱 Crazy Cat Lady</h1>
+    <MenuFrame>
       <p>Play online with friends over the network.</p>
       <button type="button" className="primary-button" onClick={() => setMode("create")}>
         Create Room
@@ -219,6 +223,6 @@ export default function OnlineSetup({ onReady, onBack }) {
       <button type="button" className="secondary-button" onClick={onBack}>
         Back
       </button>
-    </div>
+    </MenuFrame>
   );
 }

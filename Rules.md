@@ -56,11 +56,11 @@ ensure you always have 5.
 12. Sphynx -- 5 cat points (if awakened, is cold and wakes another cat
     to keep warm!)
 
-**67 draw cards:**
+**68 draw cards:**
 
 40 Number cards
 
-8 Dog cards
+9 Dog cards
 
 4 Fish cards
 
@@ -92,7 +92,11 @@ them all because 1 + 3 + 4 = 8.
 
 **Dog card**: Dogs wake up sleeping cats WOOF! WOOF! After playing,
 choose a sleeping cat from the middle to wake up and join your
-collection.
+collection. There are two special dogs:
+
+-   Guard dog wakes up a cat like the others but the cat it wakes is guarded and cannot be stolen or put back to sleep.
+
+-   Hot dog wont stop barking and wakes two cats!
 
 **Fish card**: Fish steal cats from other players. Cats love fish! After
 playing, choose an opponent's cat and it becomes yours (unless the fish
