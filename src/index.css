@@ -64,24 +64,23 @@
      (aspect-ratio 5/7, see .card in App.css) up front via the same values,
      instead of an independently-guessed min-height that drifts out of sync
      and lets the first card's appearance visibly grow the container. */
-  --card-w-mini: clamp(24px, calc(17.333px + 1.852vw), 34px);
+  /* Opponents' collected cats no longer have a separate name-label caption
+     underneath (.mini-cat-name, removed) — the illustration's own baked-in
+     name plate is meant to be readable directly, which needs a bigger card
+     than the old "mini" size (24-34px wide) ever was, so this now matches
+     --card-w-board's own range rather than having its own smaller one.
+     Deliberately NOT switching PlayerPanel.jsx's Card to size="board"
+     outright, though: .card-size-mini .card-rank's own font-size is a
+     separate, independent declaration from this width, so bumping the
+     width here grows the card without also growing the point-value number
+     — switching size props would have pulled in board's (bigger) number
+     size too. */
+  --card-w-mini: clamp(42px, calc(30px + 3.333vw), 60px);
   --card-w-board: clamp(42px, calc(30px + 3.333vw), 60px);
   --card-w-hand: clamp(62px, calc(43.333px + 5.185vw), 90px);
   --card-h-mini: calc(var(--card-w-mini) * 7 / 5);
   --card-h-board: calc(var(--card-w-board) * 7 / 5);
   --card-h-hand: calc(var(--card-w-hand) * 7 / 5);
-  /* Mini cats (opponent collected-cats rows) also render a name label below
-     the card (.mini-cat-name, App.css) — this reserves that label's
-     gap + line-height so .player-cats' min-height accounts for the whole
-     mini-cat, not just the card. Sized for *2* lines, not 1: long cat names
-     ("Russian Blue", "Maine Coon") wrap at this width while short ones
-     ("Bengal") don't, and reserving only 1 line let a wrap-eligible name
-     grow its opponent panel exactly when it appeared — same visible-jump
-     bug as the card itself, just from the label instead. Must track
-     .mini-cat's gap and .mini-cat-name's font-size/line-height in App.css. */
-  --mini-cat-label-h: calc(
-    clamp(2px, calc(0.667px + 0.37vw), 4px) + clamp(8px, calc(6px + 0.556vw), 11px) * 2.3
-  );
 
   font: 16px/145% var(--sans);
   letter-spacing: 0.1px;

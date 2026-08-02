@@ -7,7 +7,7 @@ export default function ModeSelect({ onChooseLocal, onChooseOnline }) {
 
   return (
     <MenuFrame>
-      <p>Wake, steal, and collect cats — become the Crazy Cat Lady by scoring the most points!</p>
+      <p>Wake, steal, and collect cats — become the Crazy Cat Lady!</p>
 
       <button type="button" className="primary-button" onClick={onChooseLocal}>
         Play Locally (hotseat)

@@ -30,7 +30,6 @@ export default function PlayerPanel({ player, name, isCurrentTurn, onCatClick, c
                   selectable={targetable}
                   onClick={targetable ? () => onCatClick(catIndex) : undefined}
                 />
-                <span className="mini-cat-name">{cat.name}</span>
               </div>
             );
           })}

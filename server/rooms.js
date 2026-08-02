@@ -151,6 +151,15 @@ export function getRoom(roomName) {
   return rooms.get(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
 }
 
+// Frees a room's name for reuse — called once a game finishes (see the
+// "winner" check in server/index.js's broadcastRoom), since otherwise a
+// finished room lingers forever (no other cleanup/expiry exists) and its
+// name can never be created again, even by the same player wanting to
+// immediately start a new game with the same name.
+export function removeRoom(roomName) {
+  rooms.delete(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
+}
+
 export function removeSocket(socketId) {
   for (const room of rooms.values()) {
     room.socketToSeat.delete(socketId);

@@ -5,12 +5,12 @@ import { CARD_FLY_DURATION_S } from "../game/timings.js";
 const FLY_TRANSITION = { duration: CARD_FLY_DURATION_S, ease: "easeOut" };
 
 // Renders a subset of the 12 sleeping-cat slots (a `count`-slot window
-// starting at `startIndex`) as a 2-column grid — used to show two 2x3 groups
+// starting at `startIndex`) as a 3-column grid — used to show two 3x2 groups
 // flanking the draw/discard piles, matching the design's board layout. Click
 // handlers still report the true absolute slot index.
 //
 // Deliberately NOT wrapped in <AnimatePresence>: this is a CSS `display:
-// grid` with a fixed 2-column auto-placement, and AnimatePresence keeping an
+// grid` with a fixed 3-column auto-placement, and AnimatePresence keeping an
 // exiting slot mounted alongside its already-mounted replacement briefly
 // creates a 7th child, which the grid's auto-placement reflows around —
 // visually, the *entire* grid cascades/shifts for a moment, not just the one

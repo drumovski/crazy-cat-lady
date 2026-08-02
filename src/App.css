@@ -235,17 +235,24 @@ button {
   flex: 1;
 }
 /* On a small phone viewport, the felt should run edge-to-edge with no cream
-   border showing — #root's own horizontal padding is a flat 16px (not
-   fluid, unlike its top/bottom padding above), so cancel it out here via a
-   matching negative margin rather than touching #root's padding globally
-   (that padding is still needed elsewhere — .setup-screen/.menu-content
-   have no horizontal padding of their own and rely on it). This is a binary
-   layout switch (edge-to-edge or not), not a continuously-scaling size, so
-   a hard breakpoint is used instead of the clamp() approach above. */
+   border showing, on every side — #root's own horizontal padding is a flat
+   16px, so cancel it out here via a matching negative margin rather than
+   touching #root's padding globally (that padding is still needed elsewhere
+   — .setup-screen/.menu-content have no horizontal padding of their own and
+   rely on it). This is a binary layout switch (edge-to-edge or not), not a
+   continuously-scaling size, so a hard breakpoint is used instead of the
+   clamp() approach above.
+   #root's top/bottom padding (unlike its flat horizontal 16px) is itself
+   already a clamp() — largest at this same small end of the range, shrinking
+   to 0 by 900px — so cancelling it needs the identical clamp() expression,
+   negated, rather than one flat number; margin-top/-bottom below must stay
+   in sync with #root's own padding formula above if that ever changes. */
 @media (max-width: 600px) {
   .game-board {
     margin-left: -16px;
     margin-right: -16px;
+    margin-top: calc(-1 * clamp(0px, calc(40px - 4.444vw), 24px));
+    margin-bottom: calc(-1 * clamp(0px, calc(80px - 8.889vw), 48px));
     width: calc(100% + 32px);
     max-width: none;
   }
@@ -279,26 +286,9 @@ button {
 .icon-button:hover {
   filter: brightness(0.97);
 }
-.icon-button svg,
-.win-pill svg {
+.icon-button svg {
   width: clamp(14px, calc(11.333px + 0.741vw), 18px);
   height: clamp(14px, calc(11.333px + 0.741vw), 18px);
-}
-
-.win-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  gap: clamp(6px, calc(4.667px + 0.37vw), 8px);
-  background: var(--accent-2-bg);
-  color: var(--text-h);
-  border-radius: 999px;
-  padding: clamp(6px, calc(4px + 0.556vw), 9px) clamp(16px, calc(12px + 1.111vw), 22px);
-  font-weight: 400;
-  font-size: clamp(12.5px, calc(10.167px + 0.648vw), 16px);
-  box-shadow: var(--shadow);
-  white-space: nowrap;
 }
 
 /* Board header's "Crazy Cat Lady" — plain decorative text, no icon or pill
@@ -446,25 +436,27 @@ button {
 .player-panel {
   border: none;
   border-radius: var(--radius-md);
-  padding: clamp(8px, calc(4px + 1.111vw), 14px) clamp(10px, calc(6px + 1.111vw), 16px);
+  padding: clamp(4px, calc(1.333px + 0.741vw), 8px) clamp(10px, calc(6px + 1.111vw), 16px) clamp(8px, calc(4px + 1.111vw), 14px);
   background: var(--cat-snow);
   color: var(--cat-snow-text);
 }
 .player-panel-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: clamp(6px, calc(3.333px + 0.741vw), 10px);
-  margin-bottom: clamp(6px, calc(3.333px + 0.741vw), 10px);
+  /* Score is pulled out of flow (absolute) so the name can be truly
+     centered in the panel rather than sharing a space-between row with
+     it — the name's own symmetric left/right padding below reserves room
+     for the score badge without needing to know its exact width. */
+  position: relative;
+  margin-bottom: clamp(4px, calc(1.333px + 0.741vw), 8px);
 }
 .player-panel-name {
   font-size: clamp(13px, calc(10.333px + 0.741vw), 17px);
   font-weight: 700;
   color: var(--text-h);
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
+  padding: 0 clamp(28px, calc(18px + 5vw), 46px);
 }
 @keyframes turnGlow {
   0%, 100% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
@@ -475,21 +467,24 @@ button {
 }
 
 .player-score {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: clamp(12px, calc(10px + 0.556vw), 15px);
   color: var(--text);
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .player-cats {
   display: flex;
   flex-wrap: wrap;
   gap: clamp(4px, calc(1.333px + 0.741vw), 8px);
-  /* Reserves a full mini-cat-height row (card + its name label) up front,
-     rather than a guessed min-height, so an opponent's first collected cat
-     doesn't grow this panel and shift the grid row/board below it — see
-     .your-cats-row for the same fix on the "Your Cats" panel. */
-  min-height: calc(var(--card-h-mini) + var(--mini-cat-label-h));
+  /* Reserves a full mini-cat-height row up front, rather than a guessed
+     min-height, so an opponent's first collected cat doesn't grow this
+     panel and shift the grid row/board below it — see .your-cats-row for
+     the same fix on the "Your Cats" panel. */
+  min-height: var(--card-h-mini);
 }
 .player-cats-empty {
   font-size: clamp(11px, calc(9px + 0.556vw), 14px);
@@ -499,24 +494,8 @@ button {
 
 .mini-cat {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: clamp(2px, calc(0.667px + 0.37vw), 4px);
-  width: clamp(40px, calc(29.333px + 2.963vw), 56px);
-  /* Reserves worst-case (2-line name) height on every mini-cat, not just
-     the row as a whole — otherwise whichever cats happen to have a
-     wrap-eligible name (vs. a short one-line name) make their specific row
-     taller than others, and that varies as cats get collected/stolen, so
-     the opponent panel (and everything below it) visibly wobbles instead
-     of just growing once and settling. */
-  min-height: calc(var(--card-h-mini) + var(--mini-cat-label-h));
-}
-.mini-cat-name {
-  font-size: clamp(8px, calc(6px + 0.556vw), 11px);
-  line-height: 1.15;
-  text-align: center;
-  color: var(--text);
-  word-break: break-word;
+  width: var(--card-w-mini);
 }
 
 .center-board {
@@ -582,30 +561,25 @@ button {
 .pile-group-clickable {
   cursor: pointer;
 }
-.pile-group-clickable:hover .pile-label {
-  background: rgba(15, 58, 30, 0.6);
-}
-.pile-label {
+.discard-pile-empty-label {
   font-size: clamp(10px, calc(8px + 0.556vw), 13px);
   color: var(--cat-snow);
-  background: rgba(15, 58, 30, 0.4);
-  border-radius: 999px;
-  padding: clamp(2px, calc(0.667px + 0.37vw), 4px) clamp(8px, calc(5.333px + 0.741vw), 12px);
-  white-space: nowrap;
+  text-align: center;
 }
 
 .your-cats-panel {
   background: rgba(15, 58, 30, 0.4);
   border-radius: var(--radius-md);
-  padding: clamp(10px, calc(6px + 1.111vw), 16px) clamp(12px, calc(8px + 1.111vw), 18px);
+  padding: clamp(6px, calc(3.333px + 0.741vw), 10px) clamp(12px, calc(8px + 1.111vw), 18px);
   display: flex;
   flex-direction: column;
-  gap: clamp(6px, calc(3.333px + 0.741vw), 10px);
+  gap: clamp(4px, calc(2px + 0.741vw), 8px);
 }
 .your-cats-label {
   font-size: clamp(12px, calc(10px + 0.556vw), 15px);
   font-weight: 700;
   color: var(--cat-snow);
+  text-align: center;
 }
 .your-cats-row {
   display: flex;
@@ -634,13 +608,38 @@ button {
 .message-log {
   display: flex;
   flex-direction: column;
-  gap: clamp(3px, calc(1.667px + 0.37vw), 5px);
+  /* flex-start (the default — set explicitly since it's load-bearing), not
+     center: rows are newest-first (nth-child(1) is the latest message), so
+     anchoring to the top means any overflow from a wrapped older row (see
+     max-height below) only ever clips from the *bottom* — the newest
+     message stays fully visible no matter what. Bug, fixed: this used to be
+     `center`, which — once a lower row's wrapped second line pushed the
+     total content past max-height — clipped the overflow symmetrically
+     from both ends, cutting the *top* (newest) row off instead of the
+     bottom (oldest) one. */
+  justify-content: flex-start;
+  gap: clamp(2px, calc(1px + 0.37vw), 4px);
   background: var(--cat-snow);
   color: var(--text-h);
   border-radius: var(--radius-md);
-  padding: clamp(8px, calc(5.333px + 0.741vw), 12px) clamp(12px, calc(8px + 1.111vw), 18px);
+  padding: clamp(5px, calc(3px + 0.556vw), 8px) clamp(12px, calc(8px + 1.111vw), 18px);
   box-shadow: var(--shadow);
   min-height: 20px;
+  /* A hard cap, not just a reservation: on narrow (mobile) widths a longer
+     message can wrap to 2 lines, and without this the box would grow to
+     fit it, pushing the hand fan below it down. overflow: hidden clips
+     that wrapped second line (or the 3rd message row entirely, if row 1 or
+     2 wrapped) rather than growing — losing a bit of message text is
+     preferable to the whole layout shifting. Computed from the exact same
+     padding/gap/font-size clamp()s as the rows below (each at 1 line, via
+     the global 145% line-height), so it matches their natural unwrapped
+     height precisely; keep these in sync if either changes. */
+  max-height: calc(
+    clamp(5px, calc(3px + 0.556vw), 8px) * 2 + clamp(2px, calc(1px + 0.37vw), 4px) * 2 +
+    clamp(12.5px, calc(10.167px + 0.648vw), 16px) * 1.45 +
+    clamp(11px, calc(9px + 0.556vw), 14px) * 1.45 * 2
+  );
+  overflow: hidden;
 }
 .message-log-row {
   display: flex;
@@ -721,6 +720,15 @@ button {
 }
 
 .card {
+  /* Without this, `width` (via .card-size-*) only sets the content box, and
+     padding/border add on top of it — so any variant with different
+     padding/border (e.g. .card-back zeroes out the border) renders at a
+     different actual size despite sharing the same --card-w-* value. This
+     is what let the draw/discard piles (.card-back, no border) end up
+     visibly bigger than the sleeping-cats grid's cards, even though both
+     use size="board". border-box makes the --card-w-* and --card-h-*
+     variables the real rendered size for every card variant, no exceptions. */
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -835,11 +843,11 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.7em;
-  min-height: 1.7em;
-  padding: 0 0.2em;
+  min-width: 1.3em;
+  min-height: 1.3em;
+  padding: 0 0.05em;
   border-radius: 999px;
-  background: var(--cat-snow);
+  background: #fff;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 25%, transparent);
 }
 
@@ -918,7 +926,7 @@ button {
 
 .sleeping-grid {
   display: grid;
-  grid-template-columns: repeat(2, clamp(42px, calc(30px + 3.333vw), 60px));
+  grid-template-columns: repeat(3, var(--card-w-board));
   grid-auto-rows: min-content;
   gap: clamp(6px, calc(4px + 0.556vw), 9px);
   flex-shrink: 0;
@@ -931,11 +939,29 @@ button {
   opacity: 0.45;
 }
 
-/* Win screen */
+/* Win screen — a popup over the game board (see .win-overlay), not a
+   full-page replacement, so the finished board stays visible/readable
+   behind it rather than vanishing the moment someone wins. */
+.win-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 58, 30, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
 .win-screen {
+  position: relative;
+  background: var(--cat-snow);
+  color: var(--text-h);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: clamp(20px, calc(14.667px + 1.481vw), 28px);
   text-align: center;
   max-width: clamp(420px, calc(353.333px + 18.519vw), 520px);
-  margin: 15vh auto 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;

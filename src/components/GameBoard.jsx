@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
@@ -6,8 +6,9 @@ import CardBack from "./CardBack.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
 import RulesModal from "./RulesModal.jsx";
 import SoundSettings from "./SoundSettings.jsx";
-import { isValidMathDiscard, getWinThresholds } from "../game/engine.js";
+import { isValidMathDiscard } from "../game/engine.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
+import { CARD_FLY_DURATION_S } from "../game/timings.js";
 import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
 
 // selection.mode drives what a click on a card/cat/slot means next:
@@ -17,15 +18,19 @@ import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
 // Re-clicking the originally-selected hand card cancels out of any mode.
 const EMPTY_SELECTION = {};
 
-// Hand cards fall in from roughly where the draw pile sits (above the hand)
-// and, on discard/play, fall back out the same way — rather than Card.jsx's
-// default in-place pop, which doesn't read as "coming from"/"going to"
-// anywhere in particular.
-const HAND_CARD_VARIANTS = {
-  initial: { opacity: 0, y: -60, scale: 0.7 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -60, scale: 0.7 }
-};
+// Fallback offset for a hand card's fall-in/fall-out, used only until the
+// real draw-pile-to-hand distance has been measured (see dealFromOffset in
+// GameBoard) — a small guess in the right general direction rather than no
+// offset at all, in case a card mounts before the very first measurement
+// effect has run.
+const FALLBACK_DEAL_OFFSET = { x: 0, y: -60 };
+
+// Local hotseat only: how long to keep revealing a human player's own hand
+// after their turn-ending action, before switching to the next player — see
+// the delayedLocalRevealSeat effect below. Derived from CARD_FLY_DURATION_S
+// (with a little buffer) rather than a separate hand-tuned number, so it
+// always covers the deal animation's real duration.
+const REVEAL_SWITCH_DELAY_MS = CARD_FLY_DURATION_S * 1000 + 150;
 
 const CARD_TYPE_LABELS = {
   dog: "Dog",
@@ -139,15 +144,6 @@ function RefreshIcon() {
   );
 }
 
-function TrophyIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 21h8M12 17v4M7 4h10v3a5 5 0 0 1-10 0V4Z" />
-      <path d="M7 5H4a1 1 0 0 0-1 1c0 2.5 1.5 4 4 4.3M17 5h3a1 1 0 0 1 1 1c0 2.5-1.5 4-4 4.3" />
-    </svg>
-  );
-}
-
 export default function GameBoard({
   game,
   aiPlayerIds = [],
@@ -186,6 +182,123 @@ export default function GameBoard({
   // that cycle, so the second invocation for the same batch is a no-op.
   const playedSfxRef = useRef(null);
 
+  // A dealt/drawn hand card has no destination-side layoutId partner to fly
+  // *from* (the draw pile is deliberately anonymous — see CardBack usage
+  // below), so unlike a wake/steal/discard's true shared-position flight, it
+  // can only use a plain initial/animate offset. Measuring the real on-screen
+  // distance from the draw pile to the hand (instead of a small fixed guess)
+  // is what makes that offset actually read as "coming from the deck" rather
+  // than a generic nearby pop-in.
+  const drawPileRef = useRef(null);
+  const handFanRef = useRef(null);
+  const [dealFromOffset, setDealFromOffset] = useState(FALLBACK_DEAL_OFFSET);
+  const [handCardWidth, setHandCardWidth] = useState(90); // matches --card-w-hand's max
+  // Forces every currently-mounted hand card to remount (see the key below)
+  // the moment the very first real measurement lands — see the comment on
+  // that key for why this is necessary. Only ever flips false -> true once;
+  // later remeasurements (e.g. window resize) reuse the same key.
+  const [hasMeasuredOnce, setHasMeasuredOnce] = useState(false);
+
+  useLayoutEffect(() => {
+    function measure() {
+      if (!drawPileRef.current || !handFanRef.current) return;
+      const pileRect = drawPileRef.current.getBoundingClientRect();
+      const handRect = handFanRef.current.getBoundingClientRect();
+      setDealFromOffset({
+        x: pileRect.left + pileRect.width / 2 - (handRect.left + handRect.width / 2),
+        y: pileRect.top + pileRect.height / 2 - (handRect.top + handRect.height / 2)
+      });
+      const widthPx = parseFloat(getComputedStyle(handFanRef.current).getPropertyValue("--card-w-hand"));
+      if (!Number.isNaN(widthPx)) setHandCardWidth(widthPx);
+      setHasMeasuredOnce(true);
+    }
+    measure();
+    // The fluid clamp()-based layout (see App.css) keeps resizing the draw
+    // pile and hand fan relative to each other continuously, not just at a
+    // fixed breakpoint, so this needs to stay live across the whole session
+    // rather than measuring once on mount.
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  // Every hand card shares dealFromOffset's Y (they're all in the same row,
+  // and the small per-card vertical "arc" getFanStyle already applies is
+  // negligible next to the several-hundred-px distance to the pile), but
+  // each needs its *own* X — dealFromOffset.x alone only lands a card that
+  // sits exactly at the fan's horizontal center, since it's measured
+  // relative to the hand-fan container as a whole. `.hand-fan`'s cards
+  // overlap by a fixed 16px (see getFanStyle's marginLeft), fanned out
+  // *centered* within the container (`.hand-fan { justify-content: center }`
+  // in App.css) — replicating that same geometry here (rather than
+  // measuring this specific card's own DOM position) sidesteps a mount-
+  // timing race: a brand-new card can't reliably self-measure its own
+  // final position before it's rendered once already.
+  function getDealVariants(cardIndex, totalCards) {
+    const spacing = handCardWidth - 16;
+    const fanWidth = handCardWidth + (totalCards - 1) * spacing;
+    const cardOffsetFromFanCenter = cardIndex * spacing + handCardWidth / 2 - fanWidth / 2;
+    const desiredX = dealFromOffset.x - cardOffsetFromFanCenter;
+    const desiredY = dealFromOffset.y;
+
+    // getFanStyle also rotates each card's wrapping div by up to ±25deg for
+    // the fan spread — and since that wrapper is a CSS-transform *parent* of
+    // this Card's own motion.button, Framer Motion's x/y here compose
+    // *inside* that already-rotated frame (nested transforms), not in flat
+    // screen space. Passing (desiredX, desiredY) straight through would
+    // itself end up visually rotated by the fan angle, landing well off the
+    // pile for any card that isn't dead-center in the fan. Counter-rotating
+    // by the same angle first cancels that out, so the actual on-screen
+    // motion matches the flat vector computed above.
+    const mid = (totalCards - 1) / 2;
+    const rotateDeg = totalCards > 1 ? Math.max(-25, Math.min(25, (cardIndex - mid) * 5)) : 0;
+    const rad = (rotateDeg * Math.PI) / 180;
+    const x = desiredX * Math.cos(rad) + desiredY * Math.sin(rad);
+    const y = desiredY * Math.cos(rad) - desiredX * Math.sin(rad);
+
+    return {
+      initial: { opacity: 0, x, y, scale: 0.5 },
+      animate: { opacity: 1, x: 0, y: 0, scale: 1 },
+      exit: { opacity: 0, x, y, scale: 0.5 }
+    };
+  }
+
+  // Online only: an opponent's card landing on the discard pile has no true
+  // shared-layoutId flight to fly *from* (see Card.jsx's shareLayout) since
+  // this client never rendered their hand anywhere — so it needs the same
+  // kind of explicit measured-offset treatment as a dealt card, this time
+  // measured from that opponent's own panel instead of the draw pile. One
+  // ref per currently-rendered opponent (there are at most 4, so a Map keyed
+  // by player id — rather than one ref per card — is plenty).
+  const opponentPanelRefs = useRef(new Map());
+  const discardPileSlotRef = useRef(null);
+  // Keyed by card id and computed once per discard, not recomputed on every
+  // re-render — see the comment on its lone call site below for why a fresh
+  // object reference on each render breaks Framer Motion's animation here.
+  const discardFromOpponentVariantsRef = useRef(new Map());
+
+  function getDiscardFromOpponentVariants(cardId, opponentId) {
+    if (discardFromOpponentVariantsRef.current.has(cardId)) {
+      return discardFromOpponentVariantsRef.current.get(cardId);
+    }
+    const panelEl = opponentPanelRefs.current.get(opponentId);
+    if (!panelEl || !discardPileSlotRef.current) return null;
+    const panelRect = panelEl.getBoundingClientRect();
+    const slotRect = discardPileSlotRef.current.getBoundingClientRect();
+    const x = panelRect.left + panelRect.width / 2 - (slotRect.left + slotRect.width / 2);
+    const y = panelRect.top + panelRect.height / 2 - (slotRect.top + slotRect.height / 2);
+    const variants = {
+      initial: { opacity: 0, x, y, scale: 0.6 },
+      animate: { opacity: 1, x: 0, y: 0, scale: 1 },
+      exit: { opacity: 0, x, y, scale: 0.6 }
+    };
+    // Cap growth: only the current top-of-pile card's entry can ever be
+    // queried again (an older one's card.id will never recur as topDiscard),
+    // so drop everything but this one before adding it.
+    discardFromOpponentVariantsRef.current.clear();
+    discardFromOpponentVariantsRef.current.set(cardId, variants);
+    return variants;
+  }
+
   const getName = id => playerNames[id] || `Player ${id + 1}`;
 
   const activePlayerId = game.pendingAction
@@ -202,16 +315,59 @@ export default function GameBoard({
   // anyone (the physical human at the keyboard) can act for them unless it's
   // an AI's turn. Online: a client only ever sees its own seat's hand, and
   // can only act when it's genuinely that seat's turn/decision.
-  const revealSeat = isOnline ? myPlayerId : activePlayerId;
+  const instantRevealSeat = isOnline ? myPlayerId : activePlayerId;
+
+  // Local hotseat only: a turn-ending action's state update (card drawn,
+  // turn advanced) lands in one React commit, so switching revealSeat the
+  // instant activePlayerId changes meant a human's own newly-drawn card's
+  // fly-in (see dealVariants above) never got a frame on screen — the
+  // acting player's hand was already gone, replaced by the next player's
+  // entirely different one, before the animation could be seen. Delaying
+  // the switch by REVEAL_SWITCH_DELAY_MS gives it that frame. Skipped
+  // (switches immediately) when: online (revealSeat never actually changes
+  // there); the *incoming* state is a pendingAction/pendingWakeChoice
+  // (those need the affected player's prompt attention right away, not a
+  // delayed reveal — the block-response countdown in particular is already
+  // time-sensitive); or the seat being *left* is AI-controlled (nothing
+  // waiting to see its own hand, and delaying would just make AI-vs-AI
+  // turns feel sluggish, plus risk this display falling further and further
+  // behind if AI keeps acting faster than the delay window).
+  const [delayedLocalRevealSeat, setDelayedLocalRevealSeat] = useState(instantRevealSeat);
+
+  useEffect(() => {
+    if (isOnline) return undefined;
+    if (game.pendingAction || game.pendingWakeChoice) {
+      setDelayedLocalRevealSeat(instantRevealSeat);
+      return undefined;
+    }
+    if (delayedLocalRevealSeat === instantRevealSeat) return undefined;
+    if (aiPlayerIds.includes(delayedLocalRevealSeat)) {
+      setDelayedLocalRevealSeat(instantRevealSeat);
+      return undefined;
+    }
+    const timer = setTimeout(() => setDelayedLocalRevealSeat(instantRevealSeat), REVEAL_SWITCH_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instantRevealSeat, isOnline, game.pendingAction, game.pendingWakeChoice]);
+
+  const revealSeat = isOnline ? myPlayerId : delayedLocalRevealSeat;
 
   // Single gate for "don't accept input right now" — currently just the
   // Laser Pointer reveal (not a decision, just a shared beat everyone
   // watches before it resolves itself), but this is the one place to widen
   // once card-fly animations land (e.g. OR in a "some card is still mid-
   // flight" flag) rather than threading a second condition through
-  // canInteract by hand.
+  // canInteract by hand. Local hotseat also requires revealSeat to have
+  // caught up to activePlayerId — during the delay above, revealSeat still
+  // shows the *previous* player's (already-stale) hand, and without this a
+  // fast click during that window could act on cards that aren't actually
+  // the current player's.
   const isBoardBusy = Boolean(game.pendingLaserReveal);
-  const canInteract = !isBoardBusy && (isOnline ? activePlayerId === myPlayerId : !isAiDecision);
+  const hasWinner = game.winner !== undefined;
+  const canInteract =
+    !hasWinner &&
+    !isBoardBusy &&
+    (isOnline ? activePlayerId === myPlayerId : !isAiDecision && revealSeat === activePlayerId);
   const revealedPlayer = game.players[revealSeat];
 
   useEffect(() => {
@@ -270,10 +426,6 @@ export default function GameBoard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockTimeLeft, canInteract]);
-
-  if (game.winner !== undefined) {
-    return <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />;
-  }
 
   function resetSelection() {
     setSelection(EMPTY_SELECTION);
@@ -370,9 +522,20 @@ export default function GameBoard({
     resetSelection();
   }
 
-  const thresholds = getWinThresholds(game.players.length);
   const topDiscard = game.discardPile[game.discardPile.length - 1];
   const opponents = game.players.filter(p => p.id !== revealSeat);
+
+  // Whether the card currently on top of the discard pile got there via an
+  // opponent's action rather than this client's own — see Card.jsx's
+  // shareLayout and getDiscardFromOpponentVariants above. game.lastMessage
+  // is the same structured "who just did what" signal the message log
+  // already relies on, so this is consistent with what's shown there.
+  const topDiscardFromOpponent =
+    isOnline &&
+    topDiscard &&
+    game.lastMessage &&
+    game.lastMessage.playerId !== undefined &&
+    game.lastMessage.playerId !== myPlayerId;
 
   // The discard pile doubles as the "confirm discard" target: with a
   // Fish/Catnip card selected, clicking it discards that card instead of
@@ -441,25 +604,31 @@ export default function GameBoard({
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
-      <div className="win-pill">
-        <TrophyIcon />
-        <span>
-          Win condition: {thresholds.cats} Cats or {thresholds.points} points
-        </span>
-      </div>
+      {hasWinner && <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />}
 
       <div className="opponents-row">
         {opponents.map(player => (
-          <PlayerPanel
+          // Wrapper only exists to hold a ref to this opponent's on-screen
+          // position, for getDiscardFromOpponentVariants above — a plain
+          // block div here is invisible to the grid layout (it just becomes
+          // the grid cell PlayerPanel already filled anyway).
+          <div
             key={player.id}
-            player={player}
-            name={getName(player.id)}
-            isCurrentTurn={player.id === game.currentPlayerIndex}
-            catsSelectable={
-              canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
-            }
-            onCatClick={catIndex => handleCatClick(player.id, catIndex)}
-          />
+            ref={el => {
+              if (el) opponentPanelRefs.current.set(player.id, el);
+              else opponentPanelRefs.current.delete(player.id);
+            }}
+          >
+            <PlayerPanel
+              player={player}
+              name={getName(player.id)}
+              isCurrentTurn={player.id === game.currentPlayerIndex}
+              catsSelectable={
+                canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
+              }
+              onCatClick={catIndex => handleCatClick(player.id, catIndex)}
+            />
+          </div>
         ))}
       </div>
 
@@ -479,7 +648,7 @@ export default function GameBoard({
         />
 
         <div className="pile-column">
-          <div className="pile-group">
+          <div className="pile-group" ref={drawPileRef}>
             {game.pendingLaserReveal && game.pendingLaserReveal.revealedCard ? (
               // Laser Pointer flips the top card face-up in place, on top of
               // the deck, so every player can see it before it resolves.
@@ -489,7 +658,6 @@ export default function GameBoard({
             ) : (
               <CardBack variant="deck" size="board" title="Draw pile" />
             )}
-            <span className="pile-label">{game.pendingLaserReveal ? "Revealed!" : `Draw · ${game.deck.length}`}</span>
           </div>
           <div
             className={`pile-group${canDiscardViaPile ? " pile-group-clickable" : ""}`}
@@ -516,8 +684,8 @@ export default function GameBoard({
                 back. A fixed-size slot with absolutely-positioned children
                 sidesteps that entirely, regardless of how many cards
                 AnimatePresence has mounted at once. */}
-            <div className="discard-pile-slot">
-              <AnimatePresence>
+            <div className="discard-pile-slot" ref={discardPileSlotRef}>
+              <AnimatePresence mode="wait">
                 {topDiscard ? (
                   // A disabled Card (no onClick) silently swallows clicks
                   // instead of letting them bubble to the pile-group's
@@ -533,13 +701,18 @@ export default function GameBoard({
                     card={topDiscard}
                     size="board"
                     onClick={canDiscardViaPile ? () => {} : undefined}
+                    shareLayout={!topDiscardFromOpponent}
+                    variants={
+                      topDiscardFromOpponent
+                        ? getDiscardFromOpponentVariants(topDiscard.id, game.lastMessage.playerId) ?? undefined
+                        : undefined
+                    }
                   />
                 ) : (
-                  <div className="card card-size-board sleeping-slot-empty" />
+                  <div className="card card-size-board sleeping-slot-empty discard-pile-empty-label">Discard</div>
                 )}
               </AnimatePresence>
             </div>
-            <span className="pile-label">Discard · {game.discardPile.length}</span>
           </div>
         </div>
 
@@ -598,35 +771,52 @@ export default function GameBoard({
         })}
       </div>
 
-      <div className="hand-fan">
+      <div className="hand-fan" ref={handFanRef}>
         {/* popLayout: an exiting (played/discarded) card is pulled out of
             layout flow immediately, so its siblings re-fan smoothly while
             it's still finishing its own exit animation, rather than holding
             the fan's width/spacing until the exit completes. */}
         <AnimatePresence mode="popLayout">
-          {revealedPlayer.hand.map((card, cardIndex) => {
-            const isInteractive = canInteract;
-            const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
-            // Keyed by the card's own stable id, not its current index — a
-            // played/discarded card splices out and shifts every later card's
-            // index down, which would otherwise make React (and Framer
-            // Motion's layout animation) think the card at each shifted index
-            // changed identity instead of just moving.
-            return (
-              <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
-                <div style={{ transform: style.transform }}>
-                  <Card
-                    card={card}
-                    size="hand"
-                    selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
-                    eligible={blockCounterType !== null && card.type === blockCounterType}
-                    onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
-                    variants={HAND_CARD_VARIANTS}
-                  />
+          {/* Gated on hasMeasuredOnce rather than always rendering: Framer
+              Motion locks in whatever `initial` a card's *first-ever* mount
+              saw and ignores later prop updates on that same still-mounted
+              instance — so on a brand new game, every starting hand card
+              (which would otherwise mount in the very same commit the
+              draw-pile/hand-fan refs above first measure) would be stuck
+              using FALLBACK_DEAL_OFFSET forever, not the real measured
+              value that lands a moment later. Not rendering them at all
+              until that first measurement is in hand sidesteps this
+              cleanly — genuinely mounting once, already correct, rather
+              than mounting-wrong-then-forcing-a-remount (tried that: since
+              AnimatePresence treats any key change as a real removal, the
+              wrongly-initialized instances got a full visible exit
+              animation instead of silently disappearing). This all
+              resolves inside useLayoutEffect, before the first paint, so
+              there's no visible gap where the hand is empty. */}
+          {hasMeasuredOnce &&
+            revealedPlayer.hand.map((card, cardIndex) => {
+              const isInteractive = canInteract;
+              const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
+              // Keyed by the card's own stable id, not its current index — a
+              // played/discarded card splices out and shifts every later
+              // card's index down, which would otherwise make React (and
+              // Framer Motion's layout animation) think the card at each
+              // shifted index changed identity instead of just moving.
+              return (
+                <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
+                  <div style={{ transform: style.transform }}>
+                    <Card
+                      card={card}
+                      size="hand"
+                      selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
+                      eligible={blockCounterType !== null && card.type === blockCounterType}
+                      onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
+                      variants={getDealVariants(cardIndex, revealedPlayer.hand.length)}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
         </AnimatePresence>
       </div>
     </div>
@@ -641,30 +831,36 @@ function WinScreen({ game, playerNames = [], onNewGame }) {
     return pointsB - pointsA;
   });
 
+  // Deliberately no backdrop-click-to-dismiss here (unlike RulesModal) — the
+  // game has genuinely ended and "New Game" is the only real next step,
+  // there's no separate toggle that could reopen this popup if a stray
+  // click on the dimmed board behind it closed it.
   return (
-    <div className="win-screen">
-      <h1>🎉 {getName(game.winner)} wins!</h1>
-      <table className="win-table">
-        <thead>
-          <tr>
-            <th>Player</th>
-            <th>Cats</th>
-            <th>Points</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ranked.map(player => (
-            <tr key={player.id} className={player.id === game.winner ? "win-row-winner" : ""}>
-              <td>{getName(player.id)}</td>
-              <td>{player.cats.length}</td>
-              <td>{player.cats.reduce((sum, cat) => sum + cat.points, 0)}</td>
+    <div className="win-overlay">
+      <div className="win-screen">
+        <h1>🎉 {getName(game.winner)} wins!</h1>
+        <table className="win-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Cats</th>
+              <th>Points</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button type="button" className="primary-button" onClick={onNewGame}>
-        New Game
-      </button>
+          </thead>
+          <tbody>
+            {ranked.map(player => (
+              <tr key={player.id} className={player.id === game.winner ? "win-row-winner" : ""}>
+                <td>{getName(player.id)}</td>
+                <td>{player.cats.length}</td>
+                <td>{player.cats.reduce((sum, cat) => sum + cat.points, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <button type="button" className="primary-button" onClick={onNewGame}>
+          New Game
+        </button>
+      </div>
     </div>
   );
 }

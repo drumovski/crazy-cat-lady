@@ -60,6 +60,12 @@ export default function App() {
   const [roomState, setRoomState] = useState(null); // latest payload from the server
   // Same idea as savedPlayerNameInputs, for OnlineSetup's single "Your name" field.
   const [savedOnlineName, setSavedOnlineName] = useState("");
+  // Same idea again, for the "Create Room" screen's room name — lets a
+  // player who just finished a game default straight back into the same
+  // room name for the next one instead of retyping it (the room itself is
+  // freed server-side once a game ends — see the "winner" check in
+  // server/index.js's broadcastRoom — so the name really is available again).
+  const [savedRoomName, setSavedRoomName] = useState("");
 
   function applyAction(actionFn, ...args) {
     setGame(prevGame => ({ ...actionFn(prevGame, ...args) }));
@@ -146,9 +152,9 @@ export default function App() {
     setBlockTimerSeconds(DEFAULT_BLOCK_TIMER_SECONDS);
     setOnlineSession(null);
     setRoomState(null);
-    // savedPlayerNameInputs/savedOnlineName are deliberately NOT reset here —
-    // the whole point is for a typed name to survive into the next game
-    // instead of coming back blank.
+    // savedPlayerNameInputs/savedOnlineName/savedRoomName are deliberately
+    // NOT reset here — the whole point is for a typed name/room to survive
+    // into the next game instead of coming back blank.
   }
 
   if (screen === "menu") {
@@ -204,6 +210,8 @@ export default function App() {
         onBack={backToMenu}
         initialName={savedOnlineName}
         onNameChange={setSavedOnlineName}
+        initialRoomName={savedRoomName}
+        onRoomNameChange={setSavedRoomName}
       />
     );
   }

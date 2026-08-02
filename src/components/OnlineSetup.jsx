@@ -10,7 +10,14 @@ const BLOCK_TIMER_CHOICES = Array.from(
   (_, i) => BLOCK_TIMER_MIN + i
 );
 
-export default function OnlineSetup({ onReady, onBack, initialName = "", onNameChange }) {
+export default function OnlineSetup({
+  onReady,
+  onBack,
+  initialName = "",
+  onNameChange,
+  initialRoomName = "",
+  onRoomNameChange
+}) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
   const [numAiOpponents, setNumAiOpponents] = useState(0);
@@ -23,7 +30,14 @@ export default function OnlineSetup({ onReady, onBack, initialName = "", onNameC
     setPlayerNameState(value);
     onNameChange?.(value);
   }
-  const [roomNameInput, setRoomNameInput] = useState("");
+  const [roomNameInput, setRoomNameInputState] = useState(initialRoomName);
+  // Wraps the state setter to also report the change up to App.jsx, which
+  // persists it across backToMenu — so a room name (typed, or left over from
+  // finishing a game) pre-fills again next time instead of coming back blank.
+  function setRoomNameInput(value) {
+    setRoomNameInputState(value);
+    onRoomNameChange?.(value);
+  }
   const [joinRoomName, setJoinRoomName] = useState("");
   const [error, setError] = useState(null);
   const [room, setRoom] = useState(null); // { roomName, playerId } once created/joined

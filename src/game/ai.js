@@ -41,10 +41,15 @@ function pickRichestOpponent(opponents) {
   );
 }
 
+// Guarded cats (Guard Dog) can't be targeted by Fish/Catnip at all — skips
+// them entirely, so this only ever returns an index the engine will actually
+// accept. Caller must only invoke this on a player already known to have at
+// least one unguarded cat (see the opponents filter in chooseAiTurn below).
 function pickHighestValueCatIndex(player) {
-  let bestIndex = 0;
-  for (let i = 1; i < player.cats.length; i++) {
-    if (player.cats[i].points > player.cats[bestIndex].points) {
+  let bestIndex = -1;
+  for (let i = 0; i < player.cats.length; i++) {
+    if (player.cats[i].guarded) continue;
+    if (bestIndex === -1 || player.cats[i].points > player.cats[bestIndex].points) {
       bestIndex = i;
     }
   }
@@ -72,7 +77,21 @@ function findMathDiscardPair(hand) {
 // one's available, otherwise any single non-action card).
 export function chooseAiTurn(game, playerId) {
   const player = game.players[playerId];
-  const opponentsWithCats = game.players.filter(p => p.id !== playerId && p.cats.length > 0);
+  // Only opponents with at least one *unguarded* cat are real Fish/Catnip
+  // candidates — a Guard Dog-protected cat can't be targeted at all (see
+  // playFish/playCatnip in engine.js). Bug, fixed: this used to just check
+  // `cats.length > 0` and always target the richest opponent's highest-value
+  // cat regardless of guarded status — if that specific cat was guarded, the
+  // AI picked the exact same illegal move every time it was asked to decide
+  // again, and since a rejected action doesn't advance the turn, it never
+  // stopped asking: scheduleNextStep (server/rooms.js) only checks whether
+  // the current decision-maker is still AI, not whether its last decision
+  // actually changed anything, so this was a genuine infinite loop — visible
+  // as the same 1-2 sound effects replaying forever (an unchanging
+  // game.sfxEvents re-broadcast on every failed retry, and online broadcasts
+  // always re-serialize into a fresh array the client's sfx dedupe can't
+  // recognize as unchanged).
+  const opponentsWithCats = game.players.filter(p => p.id !== playerId && p.cats.some(c => !c.guarded));
 
   const dogIndex = player.hand.findIndex(c => c.type === "dog");
   if (dogIndex !== -1 && getAvailableSlots(game).length > 0) {

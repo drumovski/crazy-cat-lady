@@ -53,7 +53,7 @@ export default function SetupScreen({ onStart, initialNames = ["", "", "", "", "
   return (
     <div className="setup-screen">
       <h1>🐱 Crazy Cat Lady</h1>
-      <p>Wake, steal, and collect cats — become the Crazy Cat Lady by scoring the most points!</p>
+      <p>Wake, steal, and collect cats — become the Crazy Cat Lady!</p>
 
       <label className="setup-field">
         Number of players

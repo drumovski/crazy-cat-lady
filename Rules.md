@@ -26,9 +26,7 @@ and then clicking on the discard pile in the centre. Whenever you play
 or discard cards you will automatically draw the same amount of cards to
 ensure you always have 5.
 
-**The cards**
-
-**12 cat cards:**
+**There are 12 cat cards**
 
 1.  Maine Coon -- 20 cat points
 
@@ -56,7 +54,7 @@ ensure you always have 5.
 12. Sphynx -- 5 cat points (if awakened, is cold and wakes another cat
     to keep warm!)
 
-**68 draw cards:**
+**68 draw cards**
 
 40 Number cards
 
@@ -88,7 +86,7 @@ You have the following number cards: 1, 3, 4, 7. You can discard the 3,
 4, and 7 because 3 + 4 = 7. If you had 1, 3, 4, and 8, you could discard
 them all because 1 + 3 + 4 = 8.
 
-**Special cards:**
+**Special cards**
 
 **Dog card**: Dogs wake up sleeping cats WOOF! WOOF! After playing,
 choose a sleeping cat from the middle to wake up and join your

@@ -63,7 +63,16 @@ function getCatImageSrc(card) {
 // size: 'mini' (opponents' collected cats) | 'board' (sleeping cats / draw /
 // discard) | 'hand' (your own collected cats + hand) — matches the design's
 // three card scales (24px / 42px / 62px wide).
-export default function Card({ card, onClick, selected, selectable, eligible, size = "hand", variants = DEFAULT_VARIANTS }) {
+export default function Card({
+  card,
+  onClick,
+  selected,
+  selectable,
+  eligible,
+  size = "hand",
+  variants = DEFAULT_VARIANTS,
+  shareLayout = true
+}) {
   const isCat = card.type === "cat";
   const imageSrc = getCardImageSrc(card);
   // The "lift" for a selected/eligible card used to be a plain CSS
@@ -83,7 +92,18 @@ export default function Card({ card, onClick, selected, selectable, eligible, si
       // between their positions/sizes automatically — no manual coordinate
       // tracking needed. Plain `layout` alone only reflows siblings within
       // one list; it can't connect two unrelated mount points.
-      layoutId={`card-${card.id}`}
+      //
+      // shareLayout: false opts a specific render out of this — used only
+      // for an opponent's card landing on the discard pile in online mode
+      // (see GameBoard.jsx). That card has never had any other on-screen
+      // representation in this client (opponent hands are hidden), but
+      // Framer Motion's layout projection would still occasionally compute
+      // a phantom flight for it from a stale/unrelated position sharing the
+      // same id — visible as the card appearing to fly in from empty space
+      // below the pile. Dropping layoutId there breaks that false match, in
+      // favor of the explicit fly-from-the-opponent's-panel `variants`
+      // GameBoard.jsx supplies for that case instead.
+      layoutId={shareLayout ? `card-${card.id}` : undefined}
       initial={variants.initial}
       animate={{ ...variants.animate, y: liftY }}
       exit={variants.exit}

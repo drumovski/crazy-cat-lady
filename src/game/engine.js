@@ -696,10 +696,12 @@ export function createGame(numPlayers) {
 
   // dealHands slices straight from the shuffled deck rather than going
   // through drawCard, so it doesn't pick up a "dealCard" sfxEvent per card on
-  // its own — queue the shuffle + one "dealCard" per card dealt here instead,
-  // so the very first thing a new game does is play like a real deal.
-  const totalCardsDealt = hands.reduce((sum, hand) => sum + hand.length, 0);
-  const sfxEvents = ["shuffle", ...Array(totalCardsDealt).fill("dealCard")];
+  // its own. Deliberately just "shuffle" here, not a "dealCard" per card
+  // dealt too (5 per player, so a 5-player game was 25 staggered dings in a
+  // row — noticeably excessive) — every *later* draw (a replacement after a
+  // discard/play) still goes through drawCard and keeps its own dealCard
+  // sound as normal; only this opening deal is quieted.
+  const sfxEvents = ["shuffle"];
 
   return {
     players: hands.map((hand, index) => ({

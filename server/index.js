@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { createRoom, joinRoom, getRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
+import { createRoom, joinRoom, getRoom, removeRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -35,6 +35,21 @@ function roomState(room) {
 function broadcastRoom(room, excludeSocket) {
   const emitter = excludeSocket ? excludeSocket.to(room.roomName) : io.to(room.roomName);
   emitter.emit("roomState", roomState(room));
+
+  // Once the game is over, free the room name for reuse — e.g. so a player
+  // can immediately create a new room with the same name (OnlineSetup.jsx
+  // defaults the "Room name" field to whatever was last used). Every
+  // still-connected socket is also made to .leave() this Socket.IO room —
+  // without that, a client lingering on the win screen (nothing forces it
+  // to navigate away) would stay subscribed to this room *name*, and start
+  // receiving broadcasts meant for an unrelated new room that later reuses
+  // it, since Socket.IO rooms are just channels keyed by name.
+  if (room.game && room.game.winner !== undefined) {
+    for (const socketId of room.seatToSocket.values()) {
+      io.sockets.sockets.get(socketId)?.leave(room.roomName);
+    }
+    removeRoom(room.roomName);
+  }
 }
 
 io.on("connection", socket => {
