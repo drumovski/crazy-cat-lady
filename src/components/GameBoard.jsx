@@ -518,12 +518,16 @@ export default function GameBoard({
   // the player who can actually act right now (the revealed player, in
   // local hotseat) rather than every viewer of the shared screen.
   const showWakeChoiceHint = canInteract && sleepingSelectable;
+  // While a Fish/Catnip is pending against the viewer, their matching
+  // counter card (Seagull/Snail) is highlighted as clickable-to-block, and
+  // (below) prompted with the same pulsing-text treatment.
+  const blockCounterType =
+    game.pendingAction && canInteract ? (game.pendingAction.type === "fish" ? "seagull" : "snail") : null;
+  const showBlockPrompt = canInteract && !showWakeChoiceHint && Boolean(blockCounterType);
   // The same pulsing-text treatment, for the general "it's your move" case —
-  // excludes the wake-choice moment (that gets its own more specific prompt
-  // above) and a pending block-response (game.pendingAction already has its
-  // own prominent countdown overlay in the center of the board, so a second
-  // "Your turn" prompt there would be redundant, not clarifying).
-  const showYourTurnHint = canInteract && !showWakeChoiceHint && !game.pendingAction;
+  // excludes the wake-choice moment and a pending block-response (both get
+  // their own more specific prompt above).
+  const showYourTurnHint = canInteract && !showWakeChoiceHint && !showBlockPrompt;
 
   const discardCards = discardSelection.map(i => activePlayer.hand[i]);
   const discardIsMathSet = discardSelection.length >= 2;
@@ -572,11 +576,6 @@ export default function GameBoard({
       confirmDiscard();
     }
   }
-
-  // While a Fish/Catnip is pending against the viewer, their matching
-  // counter card (Seagull/Snail) is highlighted as clickable-to-block.
-  const blockCounterType =
-    game.pendingAction && canInteract ? (game.pendingAction.type === "fish" ? "seagull" : "snail") : null;
 
   return (
     <div className="game-board">
@@ -754,6 +753,13 @@ export default function GameBoard({
         {showWakeChoiceHint && (
           <div className="player-prompt-overlay">
             <span className="player-prompt-overlay-text">Choose a sleeping cat</span>
+          </div>
+        )}
+        {showBlockPrompt && (
+          <div className="player-prompt-overlay">
+            <span className="player-prompt-overlay-text">
+              Block with {blockCounterType === "seagull" ? "Seagull" : "Snail"}?
+            </span>
           </div>
         )}
         {showYourTurnHint && (
