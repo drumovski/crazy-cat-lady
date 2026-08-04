@@ -793,7 +793,12 @@ export function discardCard(game, playerId, cardIndex) {
 
 // A math discard is valid if every card is a Number card, and either:
 //  - exactly two cards share the same value (a matching pair), or
-//  - three or more cards where the largest value equals the sum of the rest
+//  - exactly three cards share the same value (a matching triplet — see
+//    isNumberTriplet below; wakes a cat, distinct from the addition-set rule
+//    below since three equal values never happen to satisfy it: for value V
+//    that would need V + V === V, impossible for any positive card value), or
+//  - three or more (distinctly-valued) cards where the largest value equals
+//    the sum of the rest
 export function isValidMathDiscard(cards) {
   if (cards.length < 2 || !cards.every(c => c.type === "number")) {
     return false;
@@ -803,6 +808,10 @@ export function isValidMathDiscard(cards) {
     return cards[0].value === cards[1].value;
   }
 
+  if (isNumberTriplet(cards)) {
+    return true;
+  }
+
   const sorted = [...cards].sort((a, b) => a.value - b.value);
   const largest = sorted[sorted.length - 1].value;
   const sumOfRest = sorted.slice(0, -1).reduce((sum, c) => sum + c.value, 0);
@@ -810,7 +819,21 @@ export function isValidMathDiscard(cards) {
   return largest === sumOfRest;
 }
 
-// Discard a matching pair (e.g. two 5s) or an addition set (e.g. 2 + 5 = 7)
+// Exactly three Number cards, all the same value — checked ahead of the
+// addition-set rule in isValidMathDiscard (see there for why they can never
+// overlap), and used again in discardMathSet to decide whether this
+// particular math discard also grants a wake choice.
+function isNumberTriplet(cards) {
+  return (
+    cards.length === 3 &&
+    cards.every(c => c.type === "number") &&
+    cards[0].value === cards[1].value &&
+    cards[1].value === cards[2].value
+  );
+}
+
+// Discard a matching pair (e.g. two 5s), a matching triplet (e.g. three 5s —
+// also wakes a sleeping cat, see below), or an addition set (e.g. 2 + 5 = 7)
 // of Number cards in one go, drawing a replacement for each card discarded.
 export function discardMathSet(game, playerId, cardIndices) {
   if (!validateTurn(game, playerId)) {
@@ -837,6 +860,8 @@ export function discardMathSet(game, playerId, cardIndices) {
     return game;
   }
 
+  const isTriplet = isNumberTriplet(cards);
+
   game.sfxEvents = [];
   // Remove from the hand highest-index-first so earlier indices stay valid
   const sortedIndices = [...uniqueIndices].sort((a, b) => b - a);
@@ -847,6 +872,21 @@ export function discardMathSet(game, playerId, cardIndices) {
 
   for (let i = 0; i < cards.length; i++) {
     drawCard(game, player);
+  }
+
+  // A matching triplet grants a wake choice, same generic pendingWakeChoice
+  // mechanism the Sphynx/Hot Dog bonus wake and Laser Pointer's count-around
+  // landing already use — every caller of that mechanism (AI response, local
+  // hotseat's turn-effect, server/rooms.js's scheduleNextStep, the sleeping
+  // grid's own selectable/pulsing-prompt UI) is already generic over *why*
+  // it's pending, so this needs no changes anywhere else. If every cat's
+  // already awake there's nothing to grant, so just finish the turn normally
+  // instead — mirrors resolveLaserReveal's own getAvailableSlots check.
+  if (isTriplet && getAvailableSlots(game).length > 0) {
+    game.pendingWakeChoice = { playerId, bonus: false, actorId: playerId };
+    game.lastMessage = { playerId, kind: "discardedTriplet", count: cards.length };
+    console.log(`Player ${playerId} discarded a matching triplet and may wake a sleeping cat!`);
+    return game; // wait for respondToWakeChoice — turn does not advance yet
   }
 
   finishTurn(game, { playerId, kind: "discarded", count: cards.length });

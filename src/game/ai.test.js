@@ -68,6 +68,24 @@ function testAiDiscardsMathPairWhenNoOtherOptions() {
 
 testAiDiscardsMathPairWhenNoOtherOptions();
 
+function testAiPrefersMatchingTripletOverPair() {
+  const game = createGame(2, 0);
+  game.players[0].hand = [
+    { type: "seagull" },
+    { type: "number", value: 4 },
+    { type: "number", value: 4 },
+    { type: "number", value: 6 },
+    { type: "number", value: 6 },
+    { type: "number", value: 6 }
+  ];
+
+  const decision = chooseAiTurn(game, 0);
+  console.log("AI discards the matching triplet (wakes a cat) over the plain pair:", decision.type === "discardMathSet");
+  console.log("AI's indices point at the three 6s:", JSON.stringify(decision.cardIndices) === JSON.stringify([3, 4, 5]));
+}
+
+testAiPrefersMatchingTripletOverPair();
+
 function testAiFallsBackToSingleDiscard() {
   const game = createGame(2, 0);
   game.players[0].hand = [{ type: "seagull" }, { type: "snail" }];

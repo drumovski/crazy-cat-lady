@@ -79,8 +79,9 @@ other cards that you can play.
 
 -   If you have a pair, you can discard them both, or
 
--   You can discard 3 or more cards if their values add up to the value
-    of the largest number card you are discarding. For example:
+-   If you have 3 of a kind, you can discard them to wake a cat, or
+
+-   You can discard 3 or more different cards if their values add up to the value of the largest number card you are discarding. For example:
 
 You have the following number cards: 1, 3, 4, 7. You can discard the 3,
 4, and 7 because 3 + 4 = 7. If you had 1, 3, 4, and 8, you could discard

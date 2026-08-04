@@ -98,6 +98,8 @@ function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
       return `${who} tried to wake ${message.catName}, but already had a matching cat — it went back to sleep.`;
     case "discarded":
       return `${who} discarded ${message.count} card${message.count === 1 ? "" : "s"}.`;
+    case "discardedTriplet":
+      return `${who} discarded a matching triplet and may wake a sleeping cat!`;
     case "pendingActionAnnounce": {
       const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
       const counterLabel = message.cardType === "fish" ? "Seagull" : "Snail";

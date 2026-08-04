@@ -11,6 +11,7 @@ import {
   drawCard,
   discardCard,
   discardMathSet,
+  isValidMathDiscard,
   playLaserPointer,
   resolveLaserReveal,
   checkWinner
@@ -482,3 +483,73 @@ function testFishStealsChosenCat() {
 }
 
 testFishStealsChosenCat();
+
+function testTripletDiscardWakesACat() {
+  const game = createGame(2, 0);
+  const player = game.players[0];
+  player.hand = [
+    { type: "number", value: 5 },
+    { type: "number", value: 5 },
+    { type: "number", value: 5 },
+    { type: "number", value: 3 },
+    { type: "number", value: 7 }
+  ];
+
+  console.log(
+    "Three matching Number cards are a valid math discard:",
+    isValidMathDiscard([player.hand[0], player.hand[1], player.hand[2]])
+  );
+  console.log(
+    "Four matching Number cards are NOT a valid math discard (rule is exactly 3):",
+    !isValidMathDiscard([
+      { type: "number", value: 5 },
+      { type: "number", value: 5 },
+      { type: "number", value: 5 },
+      { type: "number", value: 5 }
+    ])
+  );
+
+  discardMathSet(game, 0, [0, 1, 2]);
+
+  console.log("Hand size unchanged (3 discarded, 3 redrawn):", player.hand.length === 5);
+  console.log("Discard pile got the 3 matching cards:", game.discardPile.length === 3);
+  console.log("A wake choice is now pending for player 0:", game.pendingWakeChoice?.playerId === 0);
+  console.log("Turn has not advanced yet:", game.currentPlayerIndex === 0);
+
+  // Resolve the wake choice (and any Sphynx-chained bonus it happens to
+  // land on) the same way a player/AI would, then confirm the turn is free
+  // to advance normally afterward — same generic pendingWakeChoice mechanism
+  // Dog/Sphynx/Hot Dog/Laser Pointer already use, so nothing else should
+  // need to know or care that a discard was what granted this one.
+  let guard = 0;
+  while (game.pendingWakeChoice && guard < 12) {
+    const slot = game.sleepingCats.findIndex(c => c !== null);
+    respondToWakeChoice(game, 0, slot);
+    guard++;
+  }
+  console.log("Player 0 gained at least one cat:", player.cats.length >= 1);
+  console.log("pendingWakeChoice cleared once resolved:", game.pendingWakeChoice === null);
+  console.log("Turn advanced to player 1:", game.currentPlayerIndex === 1);
+}
+
+testTripletDiscardWakesACat();
+
+function testTripletDiscardWithNoSleepingCatsJustFinishesTurn() {
+  const game = createGame(2, 0);
+  game.sleepingCats = game.sleepingCats.map(() => null);
+  const player = game.players[0];
+  player.hand = [
+    { type: "number", value: 5 },
+    { type: "number", value: 5 },
+    { type: "number", value: 5 },
+    { type: "number", value: 3 },
+    { type: "number", value: 7 }
+  ];
+
+  discardMathSet(game, 0, [0, 1, 2]);
+
+  console.log("No sleeping cats left — no wake choice granted:", game.pendingWakeChoice === null);
+  console.log("lastMessage falls back to the plain 'discarded' kind:", game.lastMessage.kind === "discarded");
+}
+
+testTripletDiscardWithNoSleepingCatsJustFinishesTurn();

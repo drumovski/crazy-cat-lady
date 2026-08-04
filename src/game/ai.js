@@ -71,10 +71,26 @@ function findMathDiscardPair(hand) {
   return null;
 }
 
+// Finds three Number cards in hand sharing the same value — a matching
+// triplet, which (unlike a plain pair) also wakes a cat (see engine.js's
+// discardMathSet), so it's worth preferring over a pair whenever one exists.
+function findMathDiscardTriplet(hand) {
+  const indicesByValue = new Map();
+  for (let i = 0; i < hand.length; i++) {
+    if (hand[i].type !== "number") continue;
+    const indices = indicesByValue.get(hand[i].value) ?? [];
+    indices.push(i);
+    if (indices.length === 3) return indices;
+    indicesByValue.set(hand[i].value, indices);
+  }
+  return null;
+}
+
 // Decides what an AI-controlled player should do on their turn. Priority:
 // wake a cat for free (Dog) > steal the best available cat (Fish) > weaken
-// the richest opponent (Catnip) > Laser Pointer > discard (a math pair if
-// one's available, otherwise any single non-action card).
+// the richest opponent (Catnip) > Laser Pointer > discard (a matching
+// triplet if one's available — also wakes a cat — else a same-value pair,
+// else any single non-action card).
 export function chooseAiTurn(game, playerId) {
   const player = game.players[playerId];
   // Only opponents with at least one *unguarded* cat are real Fish/Catnip
@@ -125,6 +141,11 @@ export function chooseAiTurn(game, playerId) {
   const laserIndex = player.hand.findIndex(c => c.type === "laser");
   if (laserIndex !== -1) {
     return { type: "laser", cardIndex: laserIndex };
+  }
+
+  const mathTriplet = findMathDiscardTriplet(player.hand);
+  if (mathTriplet) {
+    return { type: "discardMathSet", cardIndices: mathTriplet };
   }
 
   const mathPair = findMathDiscardPair(player.hand);
