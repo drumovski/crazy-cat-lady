@@ -516,6 +516,12 @@ export default function GameBoard({
   // the player who can actually act right now (the revealed player, in
   // local hotseat) rather than every viewer of the shared screen.
   const showWakeChoiceHint = canInteract && sleepingSelectable;
+  // The same pulsing-text treatment, for the general "it's your move" case —
+  // excludes the wake-choice moment (that gets its own more specific prompt
+  // above) and a pending block-response (game.pendingAction already has its
+  // own prominent countdown overlay in the center of the board, so a second
+  // "Your turn" prompt there would be redundant, not clarifying).
+  const showYourTurnHint = canInteract && !showWakeChoiceHint && !game.pendingAction;
 
   const discardCards = discardSelection.map(i => activePlayer.hand[i]);
   const discardIsMathSet = discardSelection.length >= 2;
@@ -744,8 +750,13 @@ export default function GameBoard({
 
       <div className="your-cats-panel">
         {showWakeChoiceHint && (
-          <div className="wake-choice-overlay">
-            <span className="wake-choice-overlay-text">Choose a sleeping cat</span>
+          <div className="player-prompt-overlay">
+            <span className="player-prompt-overlay-text">Choose a sleeping cat</span>
+          </div>
+        )}
+        {showYourTurnHint && (
+          <div className="player-prompt-overlay">
+            <span className="player-prompt-overlay-text">Your turn</span>
           </div>
         )}
         <span className="your-cats-label">

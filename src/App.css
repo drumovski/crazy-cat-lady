@@ -834,12 +834,14 @@ button {
   outline-offset: 2px;
 }
 
-@keyframes wakeChoiceTextPulse {
+@keyframes playerPromptTextPulse {
   0%, 100% { opacity: 0.6; text-shadow: 0 0 6px var(--accent-border); }
   50% { opacity: 1; text-shadow: 0 0 18px var(--accent-border); }
 }
-.wake-choice-overlay {
-  /* Same "big attention-grabbing overlay" pattern as .block-timer-overlay —
+.player-prompt-overlay {
+  /* Shared by both "Choose a sleeping cat" (a wake choice is pending) and
+     "Your turn" (a normal turn to act, no more specific prompt applies) —
+     same "big attention-grabbing overlay" pattern as .block-timer-overlay.
      position: relative on .your-cats-panel (below) is what this absolutely
      positions against. pointer-events: none isn't load-bearing today (the
      Your Cats panel's cards are never clickable anyway) but matches that
@@ -854,7 +856,7 @@ button {
   pointer-events: none;
   z-index: 5;
 }
-.wake-choice-overlay-text {
+.player-prompt-overlay-text {
   font-family: var(--heading);
   font-size: clamp(18px, calc(13px + 1.8vw), 32px);
   color: var(--accent);
@@ -864,7 +866,7 @@ button {
      on the sleeping-cat slots (selectablePulse) — this text and that border
      are cueing the exact same moment, so they read as one coordinated
      signal rather than two unrelated animations. */
-  animation: wakeChoiceTextPulse 1.4s ease-in-out infinite;
+  animation: playerPromptTextPulse 1.4s ease-in-out infinite;
 }
 
 .card-size-mini { width: var(--card-w-mini); }
