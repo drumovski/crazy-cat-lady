@@ -151,6 +151,8 @@ export default function GameBoard({
   myPlayerId, // undefined in local hotseat mode; a specific seat in online mode
   blockTimerSeconds = DEFAULT_BLOCK_TIMER_SECONDS, // null means no timer (block whenever)
   onNewGame,
+  onPlayAgain, // online only — undefined in local hotseat, so WinScreen omits the button there
+  playAgainPending = false,
   onPlayDog,
   onPlayFish,
   onPlayCatnip,
@@ -507,6 +509,13 @@ export default function GameBoard({
   }
 
   const sleepingSelectable = Boolean(game.pendingWakeChoice) || selection.mode === "dog";
+  // Drives both the sleeping-cat slots' pulsing border (SleepingCatsGrid's
+  // `selectable` prop, via .card-selectable) and this overlay — same signal,
+  // same moment, so they read as one coordinated cue rather than two. Gated
+  // on canInteract, not just sleepingSelectable, so this only appears for
+  // the player who can actually act right now (the revealed player, in
+  // local hotseat) rather than every viewer of the shared screen.
+  const showWakeChoiceHint = canInteract && sleepingSelectable;
 
   const discardCards = discardSelection.map(i => activePlayer.hand[i]);
   const discardIsMathSet = discardSelection.length >= 2;
@@ -604,7 +613,15 @@ export default function GameBoard({
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
-      {hasWinner && <WinScreen game={game} playerNames={playerNames} onNewGame={onNewGame} />}
+      {hasWinner && (
+        <WinScreen
+          game={game}
+          playerNames={playerNames}
+          onNewGame={onNewGame}
+          onPlayAgain={onPlayAgain}
+          playAgainPending={playAgainPending}
+        />
+      )}
 
       <div className="opponents-row">
         {opponents.map(player => (
@@ -726,6 +743,11 @@ export default function GameBoard({
       </div>
 
       <div className="your-cats-panel">
+        {showWakeChoiceHint && (
+          <div className="wake-choice-overlay">
+            <span className="wake-choice-overlay-text">Choose a sleeping cat</span>
+          </div>
+        )}
         <span className="your-cats-label">
           {isOnline ? "Your Cats" : `${getName(revealSeat)}'s Cats`}
         </span>
@@ -823,7 +845,7 @@ export default function GameBoard({
   );
 }
 
-function WinScreen({ game, playerNames = [], onNewGame }) {
+function WinScreen({ game, playerNames = [], onNewGame, onPlayAgain, playAgainPending }) {
   const getName = id => playerNames[id] || `Player ${id + 1}`;
   const ranked = [...game.players].sort((a, b) => {
     const pointsA = a.cats.reduce((sum, cat) => sum + cat.points, 0);
@@ -857,7 +879,17 @@ function WinScreen({ game, playerNames = [], onNewGame }) {
             ))}
           </tbody>
         </table>
-        <button type="button" className="primary-button" onClick={onNewGame}>
+        {/* onPlayAgain is only ever passed in online mode (see App.jsx) —
+            local hotseat has no "room" to recreate, "New Game" (back to the
+            menu) already covers it there. When both are shown, Play Again is
+            the primary action (the common case: same group, go again) and
+            New Game demotes to secondary (change players/settings instead). */}
+        {onPlayAgain && (
+          <button type="button" className="primary-button" onClick={onPlayAgain} disabled={playAgainPending}>
+            {playAgainPending ? "Starting…" : "Play Again"}
+          </button>
+        )}
+        <button type="button" className={onPlayAgain ? "secondary-button" : "primary-button"} onClick={onNewGame}>
           New Game
         </button>
       </div>

@@ -16,7 +16,7 @@ import {
 import { takeAiTurn } from "./game/ai.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "./game/blockTimer.js";
 import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "./game/timings.js";
-import { onRoomState, sendGameAction } from "./multiplayer/socketClient.js";
+import { onRoomState, sendGameAction, createRoom as createRoomClient, joinRoom as joinRoomClient } from "./multiplayer/socketClient.js";
 import ModeSelect from "./components/ModeSelect.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
 import OnlineSetup from "./components/OnlineSetup.jsx";
@@ -58,6 +58,19 @@ export default function App() {
   // Online state
   const [onlineSession, setOnlineSession] = useState(null); // { roomName, playerId }
   const [roomState, setRoomState] = useState(null); // latest payload from the server
+  // Bumped every time handleOnlineReady fires (a room genuinely reaching
+  // "playing") and used as <GameBoard>'s key. Needed for "Play Again": that
+  // flow goes straight from one finished game's WinScreen into a new one
+  // without ever unmounting <GameBoard> in between (same JSX branch, same
+  // component type, room name reused on purpose) — React would otherwise
+  // treat it as an update, not a fresh mount, and carry over GameBoard's own
+  // internal state (messageHistory, selection, etc.) from the just-finished
+  // game into the new one. A normal first-time join doesn't need this (the
+  // component is mounting into that position for the first time regardless
+  // of key), but bumping it there too is harmless and keeps this the one
+  // place that owns "is this a new game" rather than only firing on the
+  // rejoin path specifically.
+  const [onlineGameKey, setOnlineGameKey] = useState(0);
   // Same idea as savedPlayerNameInputs, for OnlineSetup's single "Your name" field.
   const [savedOnlineName, setSavedOnlineName] = useState("");
   // Same idea again, for the "Create Room" screen's room name — lets a
@@ -66,6 +79,10 @@ export default function App() {
   // freed server-side once a game ends — see the "winner" check in
   // server/index.js's broadcastRoom — so the name really is available again).
   const [savedRoomName, setSavedRoomName] = useState("");
+  // Disables the WinScreen's "Play Again" button for the duration of its own
+  // create-or-join round trip, so a slow connection or a double-click can't
+  // fire two competing attempts from the same client.
+  const [playAgainPending, setPlayAgainPending] = useState(false);
 
   function applyAction(actionFn, ...args) {
     setGame(prevGame => ({ ...actionFn(prevGame, ...args) }));
@@ -142,6 +159,54 @@ export default function App() {
   function handleOnlineReady({ roomName, playerId, initialState }) {
     setOnlineSession({ roomName, playerId });
     setRoomState(initialState);
+    setOnlineGameKey(k => k + 1);
+  }
+
+  // Online WinScreen's "Play Again" button. The room the game was just
+  // played in no longer exists server-side by this point — broadcastRoom
+  // removes it the moment a winner is set (see "Rooms are freed once the
+  // game ends" in CLAUDE.md) — so this recreates one with the same name and
+  // settings, read straight off the last roomState this client ever
+  // received (still sitting in React state, even though the server's own
+  // copy is gone). Every player who clicks races the same create call: the
+  // first to reach the server wins and becomes this game's creator (not
+  // necessarily the original creator — just whoever clicked first), and
+  // every other client's create attempt fails on the room-name collision, at
+  // which point it falls back to an ordinary join instead. No coordination
+  // between clients beyond that race is needed.
+  async function handlePlayAgain() {
+    if (!roomState || !onlineSession || playAgainPending) return;
+    setPlayAgainPending(true);
+
+    const { roomName, numPlayers, aiPlayerIds, playerNames, blockTimerSeconds } = roomState;
+    const numAiOpponents = aiPlayerIds.length;
+    const myName = playerNames[onlineSession.playerId];
+
+    let result = await createRoomClient(numPlayers, numAiOpponents, myName, roomName, blockTimerSeconds);
+    if (result.error) {
+      // Most likely: another player's own "Play Again" click already won the
+      // race and recreated this room name first — join it instead.
+      result = await joinRoomClient(roomName, myName);
+    }
+
+    setPlayAgainPending(false);
+
+    if (result.error) {
+      // Both attempts failed (room genuinely gone stale some other way) —
+      // don't strand the player on a dead button, send them to the menu.
+      backToMenu();
+      return;
+    }
+
+    if (result.status === "playing") {
+      handleOnlineReady({ roomName: result.roomName, playerId: result.playerId, initialState: result });
+    } else {
+      // Not everyone's rejoined yet — same "waiting for other players" state
+      // a normal create/join would produce; OnlineSetup picks this up via
+      // its initialRoom prop instead of starting back at the mode chooser.
+      setOnlineSession({ roomName: result.roomName, playerId: result.playerId });
+      setRoomState(result);
+    }
   }
 
   function backToMenu() {
@@ -212,6 +277,11 @@ export default function App() {
         onNameChange={setSavedOnlineName}
         initialRoomName={savedRoomName}
         onRoomNameChange={setSavedRoomName}
+        // Set only mid-flight through handlePlayAgain (a fresh create/join
+        // that hasn't reached "playing" yet) — null in every other path here
+        // (ordinary menu entry, or backToMenu having cleared onlineSession),
+        // so OnlineSetup only skips its normal chooser screen for that case.
+        initialRoom={onlineSession}
       />
     );
   }
@@ -221,12 +291,15 @@ export default function App() {
 
   return (
     <GameBoard
+      key={onlineGameKey}
       game={roomState.game}
       aiPlayerIds={roomState.aiPlayerIds}
       playerNames={roomState.playerNames}
       myPlayerId={myPlayerId}
       blockTimerSeconds={roomState.blockTimerSeconds}
       onNewGame={backToMenu}
+      onPlayAgain={handlePlayAgain}
+      playAgainPending={playAgainPending}
       onPlayDog={(_playerId, cardIndex, slotIndex) => dispatch("playDog", [cardIndex, slotIndex])}
       onPlayFish={(_playerId, cardIndex, targetPlayerId, targetCatIndex) =>
         dispatch("playFish", [cardIndex, targetPlayerId, targetCatIndex])

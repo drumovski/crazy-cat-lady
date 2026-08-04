@@ -27,7 +27,7 @@ function testGiveAnyCatToPlayer(game, player) {
 
 // tests
 function testWinCondition() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   let attempts = 0;
   while (game.winner === undefined && attempts < 60) {
@@ -61,7 +61,7 @@ testWinCondition();
 
 
 function testFish() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   // Force player 0 to have a Fish card at index 0
   game.players[0].hand[0] = { type: "fish" };
@@ -85,7 +85,7 @@ function testFish() {
 testFish();
 
 function testFishBlockedBySeagull() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "fish" };
   game.players[1].hand[0] = { type: "seagull" };
@@ -106,7 +106,7 @@ function testFishBlockedBySeagull() {
 testFishBlockedBySeagull();
 
 function testCatnip() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "catnip" };
   game.players[1].hand = game.players[1].hand.filter(c => c.type !== "snail");
@@ -123,7 +123,7 @@ function testCatnip() {
 testCatnip();
 
 function testCatnipBlockedBySnail() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "catnip" };
   game.players[1].hand[0] = { type: "snail" };
@@ -140,7 +140,7 @@ function testCatnipBlockedBySnail() {
 testCatnipBlockedBySnail();
 
 function testLaserPointer() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "laser" };
   game.deck.unshift({ type: "number", value: 2 }); // land on player 0 + 2 - 1 = player 1
@@ -165,7 +165,7 @@ function testLaserPointer() {
 testLaserPointer();
 
 function testAiAutoBlocks() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "fish" };
   game.players[1].hand[0] = { type: "seagull" };
@@ -182,7 +182,7 @@ function testAiAutoBlocks() {
 testAiAutoBlocks();
 
 function testDeckReshuffle() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   // Empty the deck, but leave some cards sitting in the discard pile
   game.deck = [];
@@ -205,7 +205,7 @@ function testDeckReshuffle() {
 testDeckReshuffle();
 
 function testMathDiscardPair() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand = [
     { type: "number", value: 5 },
@@ -224,7 +224,7 @@ function testMathDiscardPair() {
 testMathDiscardPair();
 
 function testMathDiscardAddition() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand = [
     { type: "number", value: 2 },
@@ -244,7 +244,7 @@ function testMathDiscardAddition() {
 testMathDiscardAddition();
 
 function testMathDiscardRejectsInvalidSet() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand = [
     { type: "number", value: 2 },
@@ -263,7 +263,7 @@ function testMathDiscardRejectsInvalidSet() {
 testMathDiscardRejectsInvalidSet();
 
 function testGingerTomConflict() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   const player = game.players[0];
 
   const gingerToms = game.sleepingCats.filter(c => c !== null && c.pairKey === "gingerTom");
@@ -284,7 +284,7 @@ function testGingerTomConflict() {
 testGingerTomConflict();
 
 function testSphynxBonusWake() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   const sphynx = game.sleepingCats.find(c => c !== null && c.wakesBonus);
   game.players[0].hand[0] = { type: "dog" };
@@ -304,7 +304,7 @@ function testSphynxBonusWake() {
 testSphynxBonusWake();
 
 function testPointsWinCondition() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   const player = game.players[0];
 
   // 20 + 15 + 15 = 50 points from just 3 cats — should win despite < 5 cats
@@ -321,7 +321,7 @@ function testPointsWinCondition() {
 testPointsWinCondition();
 
 function testFishRejectsSelfTarget() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "fish" };
   testGiveAnyCatToPlayer(game, game.players[0]);
@@ -338,7 +338,7 @@ function testFishRejectsSelfTarget() {
 testFishRejectsSelfTarget();
 
 function testCatnipRejectsSelfTarget() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "catnip" };
   testGiveAnyCatToPlayer(game, game.players[0]);
@@ -355,7 +355,7 @@ function testCatnipRejectsSelfTarget() {
 testCatnipRejectsSelfTarget();
 
 function testInvalidCardIndexIsRejected() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   const player = game.players[0];
   const handSizeBefore = player.hand.length;
   const discardSizeBefore = game.discardPile.length;
@@ -374,7 +374,7 @@ function testInvalidCardIndexIsRejected() {
 testInvalidCardIndexIsRejected();
 
 function testPlayDogRejectsInvalidPlayerIdWithoutCrashing() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   const currentPlayerBefore = game.currentPlayerIndex;
 
   playDog(game, 99, 0, 0); // playerId 99 doesn't exist — shouldn't throw
@@ -385,7 +385,7 @@ function testPlayDogRejectsInvalidPlayerIdWithoutCrashing() {
 testPlayDogRejectsInvalidPlayerIdWithoutCrashing();
 
 function testWinThresholdScalesWithFourPlayers() {
-  const game = createGame(4);
+  const game = createGame(4, 0);
   const player = game.players[0];
 
   // 4 cats, well under 40 points — should still win on cat count alone
@@ -402,7 +402,7 @@ function testWinThresholdScalesWithFourPlayers() {
 testWinThresholdScalesWithFourPlayers();
 
 function testPointsThresholdScalesWithFourPlayers() {
-  const game = createGame(4);
+  const game = createGame(4, 0);
   const player = game.players[0];
 
   // 20 + 20 = 40 points from just 2 cats — should win despite < 4 cats
@@ -417,7 +417,7 @@ function testPointsThresholdScalesWithFourPlayers() {
 testPointsThresholdScalesWithFourPlayers();
 
 function testTwoPlayerThresholdUnaffected() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   const player = game.players[0];
 
   // 4 cats worth 30 points total — should NOT win in a 2-player game
@@ -435,7 +435,7 @@ function testTwoPlayerThresholdUnaffected() {
 testTwoPlayerThresholdUnaffected();
 
 function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
-  const game = createGame(3);
+  const game = createGame(3, 0);
 
   // All 12 cats distributed, 4 each, nobody hits the 5-cat threshold.
   // Player 1 has the most points and should win the tiebreak.
@@ -465,7 +465,7 @@ function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
 testAllCatsAwakeWithNoWinnerBreaksTieByPoints();
 
 function testFishStealsChosenCat() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
 
   game.players[0].hand[0] = { type: "fish" };
   game.players[1].hand = game.players[1].hand.filter(c => c.type !== "seagull");

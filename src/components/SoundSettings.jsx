@@ -5,14 +5,23 @@ import {
   subscribeMusicVolume,
   getSfxVolume,
   setSfxVolume,
-  subscribeSfxVolume
+  subscribeSfxVolume,
+  DEFAULT_MUSIC_VOLUME,
+  DEFAULT_SFX_VOLUME
 } from "../sound/soundSettings.js";
 
+// The cross is drawn in red specifically when muted (not just currentColor,
+// like the rest of the icon) — a plain same-color X read as too subtle a
+// difference from the unmuted glyph at this small a size.
 function SpeakerIcon({ muted }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 9v6h4l5 4V5L8 9H4Z" />
-      {muted ? <path d="M16 9l5 6M21 9l-5 6" /> : <path d="M16.5 8.5a5 5 0 0 1 0 7" />}
+      {muted ? (
+        <path d="M16 9l5 6M21 9l-5 6" stroke="#d64545" />
+      ) : (
+        <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+      )}
     </svg>
   );
 }
@@ -48,6 +57,24 @@ export default function SoundSettings() {
 
   const muted = musicVolume === 0 && sfxVolume === 0;
 
+  // Remembers the pair of volumes right before "Mute all" zeroes them out,
+  // so "Unmute" restores what was actually playing rather than jumping to
+  // full/default volume. Component-level only (not persisted) — if the app
+  // is muted, then closed and reopened, there's nothing to remember, so
+  // unmuting in that case just falls back to the two channels' own defaults.
+  const preMuteRef = useRef({ music: null, sfx: null });
+
+  function toggleMuteAll() {
+    if (muted) {
+      setMusicVolume(preMuteRef.current.music ?? DEFAULT_MUSIC_VOLUME);
+      setSfxVolume(preMuteRef.current.sfx ?? DEFAULT_SFX_VOLUME);
+    } else {
+      preMuteRef.current = { music: musicVolume, sfx: sfxVolume };
+      setMusicVolume(0);
+      setSfxVolume(0);
+    }
+  }
+
   return (
     <div className="sound-settings" ref={rootRef}>
       <button
@@ -61,6 +88,10 @@ export default function SoundSettings() {
 
       {open && (
         <div className="sound-settings-popover">
+          <button type="button" className="sound-settings-mute-all" onClick={toggleMuteAll}>
+            <SpeakerIcon muted={muted} />
+            {muted ? "Unmute" : "Mute all"}
+          </button>
           <label className="sound-settings-row">
             <span>Music</span>
             <input

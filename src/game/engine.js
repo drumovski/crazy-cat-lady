@@ -690,7 +690,11 @@ export function advanceTurn(game) {
 }
 
 
-export function createGame(numPlayers) {
+// startingPlayerIndex: internal-only override for tests that need a
+// deterministic first player (e.g. hardcoding player 0 as the actor in a
+// setup step) — real callers (App.jsx, server/rooms.js) never pass it, so
+// they always get the random pick below.
+export function createGame(numPlayers, startingPlayerIndex = null) {
   const deck = shuffleDeck(createDeck());
   const { hands, remainingDeck } = dealHands(deck, numPlayers);
 
@@ -712,7 +716,10 @@ export function createGame(numPlayers) {
     deck: remainingDeck,
     discardPile: [],
     sleepingCats: createSleepingCats(),
-    currentPlayerIndex: 0,
+    // Random rather than always seat 0 (the room creator in online play, or
+    // whoever's listed first in local hotseat) — no reason the same seat
+    // should always go first every game.
+    currentPlayerIndex: startingPlayerIndex ?? Math.floor(Math.random() * numPlayers),
     pendingAction: null,
     pendingWakeChoice: null,
     lastMessage: null,

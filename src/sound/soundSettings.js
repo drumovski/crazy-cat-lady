@@ -44,9 +44,16 @@ function makeVolumeChannel(storageKey, defaultVolume) {
 }
 
 // Music defaults quieter than sound effects — full-volume background music
-// was overpowering the game sounds it's meant to sit behind.
-const musicChannel = makeVolumeChannel("crazyCatLady.musicVolume", 0.3);
-const sfxChannel = makeVolumeChannel("crazyCatLady.sfxVolume", 1);
+// was overpowering the game sounds it's meant to sit behind. Exported (not
+// just inlined below) so SoundSettings.jsx's "Mute all" toggle has something
+// sensible to restore to if it's asked to unmute with no remembered pre-mute
+// level (e.g. muted, tab closed and reopened, unmuted — the mute toggle
+// itself isn't persisted, only the two volumes are).
+export const DEFAULT_MUSIC_VOLUME = 0.3;
+export const DEFAULT_SFX_VOLUME = 1;
+
+const musicChannel = makeVolumeChannel("crazyCatLady.musicVolume", DEFAULT_MUSIC_VOLUME);
+const sfxChannel = makeVolumeChannel("crazyCatLady.sfxVolume", DEFAULT_SFX_VOLUME);
 
 export const getMusicVolume = musicChannel.get;
 export const setMusicVolume = musicChannel.set;

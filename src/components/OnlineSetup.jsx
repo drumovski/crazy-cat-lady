@@ -16,7 +16,13 @@ export default function OnlineSetup({
   initialName = "",
   onNameChange,
   initialRoomName = "",
-  onRoomNameChange
+  onRoomNameChange,
+  // Pre-seeds the "waiting for other players" screen below instead of
+  // starting at the create/join chooser — used by App.jsx's "Play Again"
+  // flow, which has already created-or-joined a room by the time this
+  // component (re)mounts and just needs to show the same waiting state a
+  // normal create/join would have landed on.
+  initialRoom = null
 }) {
   const [mode, setMode] = useState("choose"); // 'choose' | 'create' | 'join'
   const [numPlayers, setNumPlayers] = useState(2);
@@ -40,7 +46,7 @@ export default function OnlineSetup({
   }
   const [joinRoomName, setJoinRoomName] = useState("");
   const [error, setError] = useState(null);
-  const [room, setRoom] = useState(null); // { roomName, playerId } once created/joined
+  const [room, setRoom] = useState(initialRoom); // { roomName, playerId } once created/joined
 
   useEffect(() => {
     if (!room) return undefined;

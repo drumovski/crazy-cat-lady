@@ -343,6 +343,21 @@ button {
   gap: 10px;
   width: 150px;
 }
+.sound-settings-mute-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-h) 15%, transparent);
+  padding: 0 0 8px;
+  cursor: pointer;
+  text-align: left;
+}
 .sound-settings-row {
   display: flex;
   flex-direction: column;
@@ -568,6 +583,7 @@ button {
 }
 
 .your-cats-panel {
+  position: relative;
   background: rgba(15, 58, 30, 0.4);
   border-radius: var(--radius-md);
   padding: clamp(6px, calc(3.333px + 0.741vw), 10px) clamp(12px, calc(8px + 1.111vw), 18px);
@@ -800,12 +816,55 @@ button {
      the same property anyway (inline always wins over a stylesheet rule),
      so the translateY has to live on the JS side to actually take effect. */
 }
+@keyframes selectablePulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-border); }
+  50% { box-shadow: 0 0 0 5px var(--accent-border); }
+}
 .card-selectable {
   border: 3px solid var(--accent);
+  /* Sleeping-cat slots are the only real user of this class (see Card.jsx —
+     hand cards accept a `selectable` prop too, but GameBoard.jsx never
+     passes one, so this never fires there) — added because a static border
+     alone wasn't a strong enough cue that a wake choice (post-Dog, or a
+     Sphynx/Hot Dog/Laser Pointer bonus wake) was waiting on the player. */
+  animation: selectablePulse 1.4s ease-in-out infinite;
 }
 .card-eligible {
   outline: 2px dashed var(--accent-border);
   outline-offset: 2px;
+}
+
+@keyframes wakeChoiceTextPulse {
+  0%, 100% { opacity: 0.6; text-shadow: 0 0 6px var(--accent-border); }
+  50% { opacity: 1; text-shadow: 0 0 18px var(--accent-border); }
+}
+.wake-choice-overlay {
+  /* Same "big attention-grabbing overlay" pattern as .block-timer-overlay —
+     position: relative on .your-cats-panel (below) is what this absolutely
+     positions against. pointer-events: none isn't load-bearing today (the
+     Your Cats panel's cards are never clickable anyway) but matches that
+     precedent in case this panel ever grows interactivity. */
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 58, 30, 0.82);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  z-index: 5;
+}
+.wake-choice-overlay-text {
+  font-family: var(--heading);
+  font-size: clamp(18px, calc(13px + 1.8vw), 32px);
+  color: var(--accent);
+  text-align: center;
+  padding: 0 12px;
+  /* Same color + same 1.4s pulse timing as .card-selectable's border pulse
+     on the sleeping-cat slots (selectablePulse) — this text and that border
+     are cueing the exact same moment, so they read as one coordinated
+     signal rather than two unrelated animations. */
+  animation: wakeChoiceTextPulse 1.4s ease-in-out infinite;
 }
 
 .card-size-mini { width: var(--card-w-mini); }

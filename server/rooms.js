@@ -130,13 +130,40 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomNam
   return { room, playerId: seatResult.playerId };
 }
 
+// Finds a human seat to rejoin by exact name match — the only "identity" a
+// player has, since rooms are name-based with no accounts (see "Online
+// multiplayer" in CLAUDE.md). Deliberately doesn't check whether that seat's
+// existing socket is actually dead: there's no reliable way to tell "the
+// original tab is gone" from "a second device is joining in" without real
+// auth, so a matching name always wins the seat, same trust level as
+// everything else here (anyone who knows the room name and a player's name
+// could already do a lot). Uses the same trim+truncate as sanitizeName so a
+// name that got truncated to 20 chars on original join still matches.
+function findRejoinSeat(room, name) {
+  const trimmed = sanitizeName(name, null);
+  if (!trimmed) return undefined;
+  return room.humanSeats.find(seatId => room.playerNames[seatId] === trimmed);
+}
+
 export function joinRoom(roomName, socketId, name) {
   const room = rooms.get(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
   if (!room) {
     return { error: "Room not found" };
   }
   if (room.status === "playing") {
-    return { error: "That game has already started" };
+    // Bug, fixed: a dropped connection (e.g. a mobile browser discarding a
+    // backgrounded tab, which comes back as a full reload with no session to
+    // resume) used to have no way back in at all — joinRoom rejected outright
+    // once the game had started. Now a rejoin attempt whose name matches an
+    // existing seat reclaims it (rebinding seatToSocket/socketToSeat to the
+    // new socket) instead of being turned away.
+    const rejoinSeat = findRejoinSeat(room, name);
+    if (rejoinSeat === undefined) {
+      return { error: "That game has already started" };
+    }
+    room.seatToSocket.set(rejoinSeat, socketId);
+    room.socketToSeat.set(socketId, rejoinSeat);
+    return { room, playerId: rejoinSeat };
   }
 
   const seatResult = assignSeat(room, socketId, name);

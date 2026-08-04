@@ -2,7 +2,7 @@ import { createGame } from "./engine.js";
 import { chooseAiTurn, takeAiTurn, AI_NAMES, pickRandomAiName } from "./ai.js";
 
 function testAiPlaysDogWhenAvailable() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "dog" }, { type: "fish" }];
 
   const decision = chooseAiTurn(game, 0);
@@ -12,7 +12,7 @@ function testAiPlaysDogWhenAvailable() {
 testAiPlaysDogWhenAvailable();
 
 function testAiStealsFromRichestOpponentsHighestValueCat() {
-  const game = createGame(3);
+  const game = createGame(3, 0);
   game.players[0].hand = [{ type: "fish" }];
   game.players[1].cats = [{ type: "cat", id: 1, name: "Bengal", points: 5 }];
   game.players[2].cats = [
@@ -28,7 +28,7 @@ function testAiStealsFromRichestOpponentsHighestValueCat() {
 testAiStealsFromRichestOpponentsHighestValueCat();
 
 function testAiCatnipsRichestOpponent() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "catnip" }];
   game.players[1].cats = [
     { type: "cat", id: 1, name: "Siamese", points: 5 },
@@ -43,7 +43,7 @@ function testAiCatnipsRichestOpponent() {
 testAiCatnipsRichestOpponent();
 
 function testAiPlaysLaserWhenNothingBetter() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "laser" }, { type: "number", value: 5 }];
   // player 1 has no cats, so Fish/Catnip wouldn't apply anyway
 
@@ -54,7 +54,7 @@ function testAiPlaysLaserWhenNothingBetter() {
 testAiPlaysLaserWhenNothingBetter();
 
 function testAiDiscardsMathPairWhenNoOtherOptions() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [
     { type: "seagull" },
     { type: "number", value: 6 },
@@ -69,7 +69,7 @@ function testAiDiscardsMathPairWhenNoOtherOptions() {
 testAiDiscardsMathPairWhenNoOtherOptions();
 
 function testAiFallsBackToSingleDiscard() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "seagull" }, { type: "snail" }];
 
   const decision = chooseAiTurn(game, 0);
@@ -80,7 +80,7 @@ function testAiFallsBackToSingleDiscard() {
 testAiFallsBackToSingleDiscard();
 
 function testAiSkipsFishWhenNoOpponentHasCats() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "fish" }, { type: "laser" }];
   // no opponent has cats
 
@@ -91,7 +91,7 @@ function testAiSkipsFishWhenNoOpponentHasCats() {
 testAiSkipsFishWhenNoOpponentHasCats();
 
 function testTakeAiTurnAppliesTheChosenAction() {
-  const game = createGame(2);
+  const game = createGame(2, 0);
   game.players[0].hand = [{ type: "dog" }];
   // Replace every sleeping slot with a plain (non-Sphynx, no pairKey) cat.
   // Left to the real shuffled sleepingCats, the AI's "random available slot"
