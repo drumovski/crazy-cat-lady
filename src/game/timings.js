@@ -7,7 +7,7 @@
 // copies with a "keep these in sync" comment) so a future change only
 // happens in one place — including any card-fly-animation duration this
 // grows to cover once Framer Motion is wired in.
-export const AI_THINK_DELAY_MS = 700;
+export const AI_THINK_DELAY_MS = 1200;
 export const LASER_REVEAL_DELAY_MS = 2000;
 
 // How long a card's fly/pop animation takes (Card.jsx's Framer Motion
