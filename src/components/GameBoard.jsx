@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
 import CardBack from "./CardBack.jsx";
@@ -31,6 +31,15 @@ const FALLBACK_DEAL_OFFSET = { x: 0, y: -60 };
 // (with a little buffer) rather than a separate hand-tuned number, so it
 // always covers the deal animation's real duration.
 const REVEAL_SWITCH_DELAY_MS = CARD_FLY_DURATION_S * 1000 + 150;
+
+// How long to hold off showing the win popup after a winner is decided —
+// lets the win sound (already queued via game.sfxEvents, unaffected by this
+// delay) and the final board state land first, rather than the popup
+// snapping in over top of them immediately. Purely a display delay: the game
+// is already over and canInteract already blocks further input the instant
+// game.winner is set, regardless of when the popup itself becomes visible.
+const WIN_SCREEN_DELAY_MS = 3000;
+const WIN_SCREEN_FADE_DURATION_S = 1;
 
 const CARD_TYPE_LABELS = {
   dog: "Dog",
@@ -374,6 +383,18 @@ export default function GameBoard({
     (isOnline ? activePlayerId === myPlayerId : !isAiDecision && revealSeat === activePlayerId);
   const revealedPlayer = game.players[revealSeat];
 
+  // Delays the win popup's own appearance (see WIN_SCREEN_DELAY_MS above) —
+  // separate from hasWinner itself, which still blocks input immediately.
+  const [showWinScreen, setShowWinScreen] = useState(false);
+  useEffect(() => {
+    if (!hasWinner) {
+      setShowWinScreen(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setShowWinScreen(true), WIN_SCREEN_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [hasWinner]);
+
   useEffect(() => {
     if (!game.lastMessage) return;
     const isSelf = myPlayerId === game.lastMessage.playerId;
@@ -620,7 +641,7 @@ export default function GameBoard({
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
-      {hasWinner && (
+      {showWinScreen && (
         <WinScreen
           game={game}
           playerNames={playerNames}
@@ -876,8 +897,18 @@ function WinScreen({ game, playerNames = [], onNewGame, onPlayAgain, playAgainPe
   // game has genuinely ended and "New Game" is the only real next step,
   // there's no separate toggle that could reopen this popup if a stray
   // click on the dimmed board behind it closed it.
+  //
+  // Fades in (rather than snapping in instantly) — this component only ever
+  // mounts once already-delayed by WIN_SCREEN_DELAY_MS (see GameBoard's
+  // showWinScreen effect), so `initial` here is genuinely the first paint,
+  // not fighting a re-render.
   return (
-    <div className="win-overlay">
+    <motion.div
+      className="win-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: WIN_SCREEN_FADE_DURATION_S }}
+    >
       <div className="win-screen">
         <h1>🎉 {getName(game.winner)} wins!</h1>
         <table className="win-table">
@@ -912,6 +943,6 @@ function WinScreen({ game, playerNames = [], onNewGame, onPlayAgain, playAgainPe
           New Game
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
