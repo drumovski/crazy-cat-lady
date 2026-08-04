@@ -270,7 +270,38 @@ export function playDog(game, playerId, cardIndex, slotIndex) {
 }
 
 
-export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
+// playFish and playCatnip are the same shape end to end (validate the card,
+// reject a self-target, reject a missing/guarded target cat, discard+draw,
+// then either await the matching counter card or resolve immediately) —
+// only the specific messages, sfx, counter card, and resolution differ. One
+// shared implementation driven by this config avoids the two silently
+// drifting apart (e.g. a validation fix landing on one but not the other).
+const TARGETED_CARD_CONFIG = {
+  fish: {
+    notThisCardMessage: "That's not a Fish!",
+    noCatMessage: "Target player has no such cat to steal!",
+    guardedMessage: "That cat is guarded by a Guard Dog — it can't be stolen!",
+    sfx: "fish",
+    counterType: "seagull",
+    counterLabel: "Seagull",
+    resolve: (game, attackerId, targetId, targetCatIndex) => resolveFishSteal(game, attackerId, targetId, targetCatIndex),
+    resolvedMessageKind: "fishStolen"
+  },
+  catnip: {
+    notThisCardMessage: "That's not Catnip!",
+    noCatMessage: "Target player has no such cat to put to sleep!",
+    guardedMessage: "That cat is guarded by a Guard Dog — it can't be put back to sleep!",
+    sfx: "catnip",
+    counterType: "snail",
+    counterLabel: "Snail",
+    resolve: (game, attackerId, targetId, targetCatIndex) => resolveCatnip(game, targetId, targetCatIndex),
+    resolvedMessageKind: "catnipped"
+  }
+};
+
+function playCardAgainstOpponent(game, playerId, cardIndex, targetPlayerId, targetCatIndex, cardType) {
+  const config = TARGETED_CARD_CONFIG[cardType];
+
   if (!validateTurn(game, playerId)) {
     return game;
   }
@@ -278,8 +309,8 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
   const player = game.players[playerId];
   const card = player.hand[cardIndex];
 
-  if (!card || card.type !== "fish") {
-    console.log("That's not a Fish!");
+  if (!card || card.type !== cardType) {
+    console.log(config.notThisCardMessage);
     return game;
   }
 
@@ -291,24 +322,24 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
   const targetPlayer = game.players[targetPlayerId];
 
   if (!targetPlayer || !targetPlayer.cats[targetCatIndex]) {
-    console.log("Target player has no such cat to steal!");
+    console.log(config.noCatMessage);
     return game;
   }
 
   if (targetPlayer.cats[targetCatIndex].guarded) {
-    console.log("That cat is guarded by a Guard Dog — it can't be stolen!");
+    console.log(config.guardedMessage);
     return game;
   }
 
-  game.sfxEvents = ["fish"];
+  game.sfxEvents = [config.sfx];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
   drawCard(game, player);
 
-  const targetHasSeagull = targetPlayer.hand.some(c => c.type === "seagull");
-  if (targetHasSeagull) {
+  const targetHasCounter = targetPlayer.hand.some(c => c.type === config.counterType);
+  if (targetHasCounter) {
     game.pendingAction = {
-      type: "fish",
+      type: cardType,
       attackerId: playerId,
       targetId: targetPlayerId,
       catIndex: targetCatIndex
@@ -318,78 +349,30 @@ export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatInd
       kind: "pendingActionAnnounce",
       attackerId: playerId,
       catName: targetPlayer.cats[targetCatIndex].name,
-      cardType: "fish"
+      cardType
     };
-    console.log(`Player ${targetPlayerId} may block with a Seagull!`);
+    console.log(`Player ${targetPlayerId} may block with a ${config.counterLabel}!`);
     return game; // wait for respondToPendingAction — turn does not advance yet
   }
 
-  const stolenCatName = targetPlayer.cats[targetCatIndex].name;
-  resolveFishSteal(game, playerId, targetPlayerId, targetCatIndex);
-  finishTurn(game, { playerId: targetPlayerId, kind: "fishStolen", attackerId: playerId, catName: stolenCatName });
+  const targetCatName = targetPlayer.cats[targetCatIndex].name;
+  config.resolve(game, playerId, targetPlayerId, targetCatIndex);
+  finishTurn(game, {
+    playerId: targetPlayerId,
+    kind: config.resolvedMessageKind,
+    attackerId: playerId,
+    catName: targetCatName
+  });
 
   return game;
 }
 
+export function playFish(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
+  return playCardAgainstOpponent(game, playerId, cardIndex, targetPlayerId, targetCatIndex, "fish");
+}
+
 export function playCatnip(game, playerId, cardIndex, targetPlayerId, targetCatIndex) {
-  if (!validateTurn(game, playerId)) {
-    return game;
-  }
-
-  const player = game.players[playerId];
-  const card = player.hand[cardIndex];
-
-  if (!card || card.type !== "catnip") {
-    console.log("That's not Catnip!");
-    return game;
-  }
-
-  if (targetPlayerId === playerId) {
-    console.log("You can't target yourself!");
-    return game;
-  }
-
-  const targetPlayer = game.players[targetPlayerId];
-
-  if (!targetPlayer || !targetPlayer.cats[targetCatIndex]) {
-    console.log("Target player has no such cat to put to sleep!");
-    return game;
-  }
-
-  if (targetPlayer.cats[targetCatIndex].guarded) {
-    console.log("That cat is guarded by a Guard Dog — it can't be put back to sleep!");
-    return game;
-  }
-
-  game.sfxEvents = ["catnip"];
-  player.hand.splice(cardIndex, 1);
-  game.discardPile.push(card);
-  drawCard(game, player);
-
-  const targetHasSnail = targetPlayer.hand.some(c => c.type === "snail");
-  if (targetHasSnail) {
-    game.pendingAction = {
-      type: "catnip",
-      attackerId: playerId,
-      targetId: targetPlayerId,
-      catIndex: targetCatIndex
-    };
-    game.lastMessage = {
-      playerId: targetPlayerId,
-      kind: "pendingActionAnnounce",
-      attackerId: playerId,
-      catName: targetPlayer.cats[targetCatIndex].name,
-      cardType: "catnip"
-    };
-    console.log(`Player ${targetPlayerId} may block with a Snail!`);
-    return game; // wait for respondToPendingAction — turn does not advance yet
-  }
-
-  const sleepyCatName = targetPlayer.cats[targetCatIndex].name;
-  resolveCatnip(game, targetPlayerId, targetCatIndex);
-  finishTurn(game, { playerId: targetPlayerId, kind: "catnipped", attackerId: playerId, catName: sleepyCatName });
-
-  return game;
+  return playCardAgainstOpponent(game, playerId, cardIndex, targetPlayerId, targetCatIndex, "catnip");
 }
 
 // Called by the target player after a Fish or Catnip is played against them.

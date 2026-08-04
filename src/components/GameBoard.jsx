@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import PlayerPanel from "./PlayerPanel.jsx";
 import Card from "./Card.jsx";
 import CardBack from "./CardBack.jsx";
 import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
 import RulesModal from "./RulesModal.jsx";
 import SoundSettings from "./SoundSettings.jsx";
+import WinScreen, { WIN_SCREEN_DELAY_MS } from "./WinScreen.jsx";
+import { formatLastMessage } from "./formatLastMessage.js";
 import { isValidMathDiscard } from "../game/engine.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import { CARD_FLY_DURATION_S } from "../game/timings.js";
@@ -31,99 +33,6 @@ const FALLBACK_DEAL_OFFSET = { x: 0, y: -60 };
 // (with a little buffer) rather than a separate hand-tuned number, so it
 // always covers the deal animation's real duration.
 const REVEAL_SWITCH_DELAY_MS = CARD_FLY_DURATION_S * 1000 + 150;
-
-// How long to hold off showing the win popup after a winner is decided —
-// lets the win sound (already queued via game.sfxEvents, unaffected by this
-// delay) and the final board state land first, rather than the popup
-// snapping in over top of them immediately. Purely a display delay: the game
-// is already over and canInteract already blocks further input the instant
-// game.winner is set, regardless of when the popup itself becomes visible.
-const WIN_SCREEN_DELAY_MS = 3000;
-const WIN_SCREEN_FADE_DURATION_S = 1;
-
-const CARD_TYPE_LABELS = {
-  dog: "Dog",
-  fish: "Fish",
-  seagull: "Seagull",
-  catnip: "Catnip",
-  snail: "Snail",
-  laser: "Laser Pointer"
-};
-
-// game.lastMessage is data ({ kind, ...fields }), not pre-formatted text, so
-// it can be rendered using display names instead of a hardcoded "Player N" —
-// and, critically, so the pronoun can flip based on who's actually looking.
-// In online mode this only ever renders for the one client it's about, so
-// "your"/"you" is always correct there. In local hotseat mode there's no
-// single "you" — the banner is visible to the whole shared screen regardless
-// of whose turn it is now — so isSelf is always false there and every
-// message names the affected player instead of assuming it's the viewer.
-function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
-  const who = isSelf ? "You" : getName(message.playerId);
-  const subjectPossessive = isSelf ? "your" : `${getName(message.playerId)}'s`;
-  const ownPossessive = isSelf ? "your" : "their";
-
-  switch (message.kind) {
-    case "fishStolen":
-      return `${getName(message.attackerId)} stole ${subjectPossessive} ${message.catName} with a Fish!`;
-    case "catnipped":
-      return `${getName(message.attackerId)} put ${subjectPossessive} ${message.catName} back to sleep with Catnip!`;
-    case "blocked": {
-      const counterLabel = message.counterType.charAt(0).toUpperCase() + message.counterType.slice(1);
-      const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
-      return `${getName(message.blockerId)} blocked ${subjectPossessive} ${cardLabel} with a ${counterLabel}!`;
-    }
-    case "fishStolenConfirm":
-      return `${who} stole ${getName(message.targetId)}'s ${message.catName} with ${ownPossessive} Fish!`;
-    case "catnippedConfirm":
-      return `${who} put ${getName(message.targetId)}'s ${message.catName} back to sleep with ${ownPossessive} Catnip!`;
-    case "laserRevealing":
-      return isSelf ? "You played Laser Pointer — revealing the top card..." : `${who} played Laser Pointer — revealing the top card...`;
-    case "laserNoCards":
-      return isSelf ? "No cards left to reveal." : `${who} had no cards left to reveal.`;
-    case "laserNoSlots":
-      return isSelf
-        ? "Revealed a number card, but no sleeping cats are left to wake."
-        : `${who} revealed a number card, but no sleeping cats were left to wake.`;
-    case "laserReveal":
-      return isSelf
-        ? `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`
-        : `${who}'s Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to ${ownPossessive} hand.`;
-    case "laserWakeChoice":
-      return `${who} played Laser Pointer — the count landed on ${getName(message.targetId)}, who may wake a sleeping cat!`;
-    case "wokeCat":
-      return `${who} woke a ${message.catName} Cat!`;
-    case "wokeBonusCat":
-      return `${who} woke the ${message.catName} Cat so ${isSelf ? "you" : "they"} can wake another Cat!`;
-    case "wokeGuardedCat":
-      return message.bonus
-        ? `${who} woke a guarded ${message.catName} Cat — it can't be stolen or put to sleep — and gets to wake another Cat!`
-        : `${who} woke a guarded ${message.catName} Cat — it can't be stolen or put to sleep!`;
-    case "hotDogWoke":
-      return message.bonus
-        ? `${who} played Hot Dog, waking a ${message.catName} Cat — and gets to wake another Cat!`
-        : `${who} played Hot Dog, waking a ${message.catName} Cat!`;
-    case "wokeCatConflict":
-      return `${who} tried to wake ${message.catName}, but already had a matching cat — it went back to sleep.`;
-    case "discarded":
-      return `${who} discarded ${message.count} card${message.count === 1 ? "" : "s"}.`;
-    case "discardedTriplet":
-      return `${who} discarded a matching triplet and may wake a sleeping cat!`;
-    case "pendingActionAnnounce": {
-      const cardLabel = message.cardType === "fish" ? "Fish" : "Catnip";
-      const counterLabel = message.cardType === "fish" ? "Seagull" : "Snail";
-      const verb = message.cardType === "fish" ? "steal" : "put to sleep";
-      const hasVerb = isSelf ? "have" : "has";
-      const timerPhrase =
-        blockTimerSeconds === null
-          ? `${who} can block with a ${counterLabel} at any time!`
-          : `${who} ${hasVerb} ${blockTimerSeconds} seconds to block with a ${counterLabel}!`;
-      return `${getName(message.attackerId)} played ${cardLabel} to ${verb} ${subjectPossessive} ${message.catName}! ${timerPhrase}`;
-    }
-    default:
-      return "";
-  }
-}
 
 // Fanned hand geometry — spreads N cards around a center card, matching the
 // design's 5-card arc (rotation ±10°, ±5°, 0°, arc lift 8/2/0px) generalized
@@ -885,64 +794,3 @@ export default function GameBoard({
   );
 }
 
-function WinScreen({ game, playerNames = [], onNewGame, onPlayAgain, playAgainPending }) {
-  const getName = id => playerNames[id] || `Player ${id + 1}`;
-  const ranked = [...game.players].sort((a, b) => {
-    const pointsA = a.cats.reduce((sum, cat) => sum + cat.points, 0);
-    const pointsB = b.cats.reduce((sum, cat) => sum + cat.points, 0);
-    return pointsB - pointsA;
-  });
-
-  // Deliberately no backdrop-click-to-dismiss here (unlike RulesModal) — the
-  // game has genuinely ended and "New Game" is the only real next step,
-  // there's no separate toggle that could reopen this popup if a stray
-  // click on the dimmed board behind it closed it.
-  //
-  // Fades in (rather than snapping in instantly) — this component only ever
-  // mounts once already-delayed by WIN_SCREEN_DELAY_MS (see GameBoard's
-  // showWinScreen effect), so `initial` here is genuinely the first paint,
-  // not fighting a re-render.
-  return (
-    <motion.div
-      className="win-overlay"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: WIN_SCREEN_FADE_DURATION_S }}
-    >
-      <div className="win-screen">
-        <h1>🎉 {getName(game.winner)} wins!</h1>
-        <table className="win-table">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Cats</th>
-              <th>Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranked.map(player => (
-              <tr key={player.id} className={player.id === game.winner ? "win-row-winner" : ""}>
-                <td>{getName(player.id)}</td>
-                <td>{player.cats.length}</td>
-                <td>{player.cats.reduce((sum, cat) => sum + cat.points, 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {/* onPlayAgain is only ever passed in online mode (see App.jsx) —
-            local hotseat has no "room" to recreate, "New Game" (back to the
-            menu) already covers it there. When both are shown, Play Again is
-            the primary action (the common case: same group, go again) and
-            New Game demotes to secondary (change players/settings instead). */}
-        {onPlayAgain && (
-          <button type="button" className="primary-button" onClick={onPlayAgain} disabled={playAgainPending}>
-            {playAgainPending ? "Starting…" : "Play Again"}
-          </button>
-        )}
-        <button type="button" className={onPlayAgain ? "secondary-button" : "primary-button"} onClick={onNewGame}>
-          New Game
-        </button>
-      </div>
-    </motion.div>
-  );
-}

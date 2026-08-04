@@ -18,8 +18,13 @@ Have the most points once all cats are awake.
 There are 12 cat cards face down in the middle, a draw pile and a
 discard pile. Each player starts with 5 draw cards in their hand. The
 cats in the middle are sleeping and need to be awakened to join your
-crazy cat lady collection. There are two ways to wake up a cat. Play a
-dog card or take a chance with a crazy laser pointer card.
+crazy cat lady collection. There are three ways to wake up a cat:
+
+-   Play a dog card, or
+
+-   Take a chance with a crazy laser pointer card, or
+
+-   Discard 3 number cards with the same number (three of a kind).
 
 You can discard a card or multiple number cards by selecting the card/s
 and then clicking on the discard pile in the centre. Whenever you play

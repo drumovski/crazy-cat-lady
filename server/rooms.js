@@ -19,6 +19,19 @@ import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "../src/game/timings.js
 const ROOM_NAME_MIN_LENGTH = 4;
 const ROOM_NAME_MAX_LENGTH = 16;
 
+// How long a room is allowed to sit with zero connected human sockets before
+// it's swept away — covers both a "waiting" room nobody ever finished
+// joining and a "playing" room every human has disconnected from. Generous
+// on purpose: the whole point of the rejoin-by-name feature (see joinRoom)
+// is that a dropped mobile player can come back later, so this must comfortably
+// outlast a normal "switched apps, got distracted, came back" gap, not just
+// a network blip. Checked periodically (ROOM_SWEEP_INTERVAL_MS) rather than
+// with a per-room timer, since a reconnect can cancel the clock at any time
+// (see assignSeat/joinRoom's rejoin branch clearing room.emptySince) and
+// there's no need for the sweep itself to be more precise than a few minutes.
+const ROOM_ABANDON_TIMEOUT_MS = 30 * 60 * 1000;
+const ROOM_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
 // Keyed by the room name lowercased, so lookups/uniqueness are
 // case-insensitive; each room still remembers the creator's original casing
 // (room.roomName) for display.
@@ -59,6 +72,12 @@ function sanitizeName(name, fallback) {
   return trimmed || fallback;
 }
 
+// True once every human seat's connection has dropped — the signal the
+// abandoned-room sweep (removeAbandonedRooms) uses to start its clock.
+function isRoomEmpty(room) {
+  return room.humanSeats.every(seatId => !room.seatToSocket.has(seatId));
+}
+
 function assignSeat(room, socketId, name) {
   const freeSeat = room.humanSeats.find(seatId => !room.seatToSocket.has(seatId));
   if (freeSeat === undefined) {
@@ -68,6 +87,9 @@ function assignSeat(room, socketId, name) {
   room.seatToSocket.set(freeSeat, socketId);
   room.socketToSeat.set(socketId, freeSeat);
   room.playerNames[freeSeat] = sanitizeName(name, `Player ${freeSeat + 1}`);
+  // A live connection just landed — this room is no longer a cleanup
+  // candidate until it goes fully empty again (see removeSocket).
+  room.emptySince = null;
 
   if (room.humanSeats.every(seatId => room.seatToSocket.has(seatId))) {
     room.game = createGame(room.numPlayers);
@@ -114,7 +136,10 @@ export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomNam
     socketToSeat: new Map(),
     playerNames: new Array(numPlayers).fill(null),
     game: null,
-    status: "waiting"
+    status: "waiting",
+    // Timestamp of when this room last had zero connected human sockets, or
+    // null while at least one is connected — see removeAbandonedRooms.
+    emptySince: null
   };
 
   const usedAiNames = [];
@@ -163,6 +188,7 @@ export function joinRoom(roomName, socketId, name) {
     }
     room.seatToSocket.set(rejoinSeat, socketId);
     room.socketToSeat.set(socketId, rejoinSeat);
+    room.emptySince = null;
     return { room, playerId: rejoinSeat };
   }
 
@@ -187,11 +213,50 @@ export function removeRoom(roomName) {
   rooms.delete(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
 }
 
+// Bug, fixed: this used to only delete the socketToSeat entry, leaving
+// seatToSocket (the reverse map) pointing at the now-dead socket forever —
+// harmless for the rejoin-by-name flow (it just overwrites both maps
+// regardless of what's currently there), but it meant a seat could never be
+// observed as "actually free" again: assignSeat's free-seat search consults
+// seatToSocket, so a human who disconnected before a "waiting" room filled
+// permanently occupied their seat, and isRoomEmpty (used by the abandoned-
+// room sweep below) could never see a room as truly empty either. Now both
+// maps are kept in sync on disconnect, and — if that was this room's last
+// connected human — its abandon clock starts.
 export function removeSocket(socketId) {
   for (const room of rooms.values()) {
+    const seatId = room.socketToSeat.get(socketId);
+    if (seatId === undefined) continue;
+
     room.socketToSeat.delete(socketId);
+    room.seatToSocket.delete(seatId);
+
+    if (room.emptySince === null && isRoomEmpty(room)) {
+      room.emptySince = Date.now();
+    }
   }
 }
+
+// Periodic sweep for rooms nobody's coming back to — a "waiting" room that
+// never filled, or a "playing" room every human has disconnected from for
+// longer than ROOM_ABANDON_TIMEOUT_MS. Rooms that finish normally are freed
+// immediately elsewhere (see removeRoom's own doc comment); this only
+// catches the ones that never reach that point at all.
+export function removeAbandonedRooms() {
+  const now = Date.now();
+  for (const [key, room] of rooms) {
+    if (room.emptySince !== null && now - room.emptySince > ROOM_ABANDON_TIMEOUT_MS) {
+      rooms.delete(key);
+    }
+  }
+}
+
+// .unref() so this background timer alone doesn't keep a process alive —
+// irrelevant for the real server (server/index.js's httpServer.listen()
+// already does that), but matters for anything else that imports rooms.js
+// without starting a listening server, e.g. rooms.test.js, which would
+// otherwise hang forever after its own (synchronous) assertions finish.
+setInterval(removeAbandonedRooms, ROOM_SWEEP_INTERVAL_MS).unref();
 
 export function handleAction(room, playerId, type, args) {
   const actionFn = ACTIONS[type];
