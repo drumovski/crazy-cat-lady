@@ -2,15 +2,19 @@
    breakpoint (mobile size, then straight to desktop size) now scales
    continuously with viewport width instead, via clamp(min, preferred, max)
    where `preferred` is a linear function of `vw`. Interpolation range is
-   360px (small phone) to 900px (.game-board's own 960px cap makes further
-   growth beyond that moot) — same range used for every clamp() in this file
-   so everything scales together proportionally rather than at uneven rates.
+   360px (small phone) to 900px (.game-board's own max-width cap makes
+   further growth beyond that moot) — same range used for every clamp() in
+   this file so everything scales together proportionally rather than at
+   uneven rates.
    min/max below are exactly the old mobile-base/desktop-media-query values,
    so the look at both ends of the range is unchanged; only the transition
    between them is new. */
 #root {
   width: 100%;
-  max-width: 1100px;
+  /* Raised from 1100px to 1280px alongside .game-board's own max-width bump
+     (below) — this is just the outer ceiling that would otherwise clip
+     .game-board short of its new, wider target. */
+  max-width: 1280px;
   margin: 0 auto;
   padding: clamp(0px, calc(40px - 4.444vw), 24px) 16px clamp(0px, calc(80px - 8.889vw), 48px);
   text-align: left;
@@ -226,7 +230,14 @@ button {
   flex-direction: column;
   gap: clamp(12px, calc(8px + 1.111vw), 18px);
   color: var(--cat-snow);
-  max-width: clamp(480px, calc(160px + 88.889vw), 960px);
+  /* Max raised again, 1040px -> 1200px (same 360->900vw interpolation
+     range, min unchanged at 480px): .opponents-row's minmax column width was
+     widened (see .opponents-row below, now sized to fit 3 mini cats instead
+     of 2) so a 4-opponent game needs correspondingly more room to keep all
+     4 in one row alongside the .your-cats-panel sidebar. #root's own
+     max-width (top of this file) had to grow to match, or it would just
+     clip this back down before it ever reached 1200px. */
+  max-width: clamp(480px, 133.333vw, 1200px);
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -444,8 +455,52 @@ button {
 
 .opponents-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(140px, calc(113.333px + 7.407vw), 180px), 1fr));
+  /* Column min-width is computed from the actual content it needs to hold —
+     3 mini cats + 2 gaps between them + the panel's own left/right padding
+     — rather than a separately-guessed clamp() that could drift out of sync
+     with .player-panel/.player-cats/.mini-cat's real sizes. Reuses those
+     exact clamp() expressions (--card-w-mini from index.css, .player-cats's
+     gap, .player-panel's horizontal padding) so a panel always has room for
+     (at least) 3 cats before a 4th wraps to a second row, at every viewport
+     width, not just the two ends of the range. */
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(
+      calc(3 * var(--card-w-mini) + 2 * clamp(4px, calc(1.333px + 0.741vw), 8px) + 2 * clamp(10px, calc(6px + 1.111vw), 16px)),
+      1fr
+    )
+  );
   gap: clamp(8px, calc(4px + 1.111vw), 14px);
+}
+/* Exactly 4 opponents only (see the conditional class in GameBoard.jsx):
+   auto-fit's minmax above picks whatever column count currently fits,
+   continuously, which for exactly 4 items means it passes through 3 columns
+   (a lopsided 3-then-1-alone row) somewhere between "4 fits" and "2 fits" —
+   fine for other opponent counts (an auto-fit 3 or 5 doesn't have this same
+   lopsided-leftover problem the way going 4 -> 3 -> 2 does), but for 4 this
+   in-between state was landing right around the .board-middle sidebar's
+   900px breakpoint, which itself shifts .board-main's available width by a
+   step (not continuously) — see the container-type comment on .board-main —
+   making the "does 3 fit" window appear at more than one point as the
+   container narrows. Instead of chasing that with auto-fit tuning, this
+   overrides to a hard choice between exactly two states — 2x2, or all 4 —
+   sized off .board-main's own real width (a container query, not a
+   viewport-width media query) so the sidebar's step change doesn't cause
+   the same column count to mean two different things at two different
+   widths. 980px sits with real margin on both sides of the two thresholds
+   that actually matter: comfortably above the ~954px four-columns-need-this
+   requirement (3 mini cats/column * 4 + gaps, at max card scale — see the
+   minmax formula above) and comfortably below the ~1000px .board-main
+   actually reaches at the board's own max width once the sidebar's ~126px
+   is accounted for — no repeat of the earlier few-pixels-short near-miss
+   that caused the very first version of this wide layout to wrap. */
+.opponents-row-four {
+  grid-template-columns: repeat(2, 1fr);
+}
+@container (min-width: 980px) {
+  .opponents-row-four {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .player-panel {
@@ -491,6 +546,29 @@ button {
   white-space: nowrap;
 }
 
+/* Small stand-in for the big central .block-timer-overlay, shown on this
+   specific opponent's own panel to every viewer who isn't the actual block
+   target (see GameBoard.jsx's bystanderBlockTargetId) — mirrors .player-score
+   on the opposite side of the header, same "small badge in the corner" scale
+   rather than a full countdown display. */
+.player-block-countdown {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 1.6em;
+  height: 1.6em;
+  padding: 0 0.2em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--cat-snow);
+  font-weight: 700;
+  font-size: clamp(11px, calc(9px + 0.556vw), 14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .player-cats {
   display: flex;
   flex-wrap: wrap;
@@ -511,6 +589,46 @@ button {
   display: flex;
   align-items: center;
   width: var(--card-w-mini);
+}
+
+/* Wraps .board-main (opponents/board/message-log/hand, stacked) +
+   .your-cats-panel — stacked by default (this is purely standing in for
+   what used to be .game-board's own gap between what were, before, direct
+   children), switching to a two-column row on wide screens (see the
+   @media block near the bottom of this file) so Your Cats can sit as a
+   sidebar running the full height of .board-main, instead of a full-width
+   panel squeezed between whatever's directly above/below it. A genuine
+   structural swap like this needs a real breakpoint, not the clamp()
+   fluid-scaling used everywhere else in this file — same reasoning as
+   .game-board's own sub-600px edge-to-edge exception above. */
+.board-middle {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, calc(8px + 1.111vw), 18px);
+}
+.board-main {
+  /* Reuses the exact gap .game-board itself used to have — this is exactly
+     that same spacing, just one level deeper now that these are
+     .board-main's children instead of .game-board's own. */
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, calc(8px + 1.111vw), 18px);
+  /* On wide screens this becomes a CSS Grid `1fr` column (see .board-middle
+     below) — without min-width: 0, a grid item's default min-width is
+     "auto" (its content's own natural minimum), which can stop the column
+     shrinking to its fair 1fr share and blow out the grid's width instead. */
+  min-width: 0;
+  /* Query source for .opponents-row-four below — its own real rendered
+     width, not the viewport's. Needed because the two aren't proportional:
+     .your-cats-panel's sidebar appearing/disappearing at the 900px viewport
+     breakpoint (see .board-middle) changes .board-main's available width by
+     ~126px in one step, so a viewport-width media query would see the same
+     "3 columns worth of room" zone appear twice — once just above 900px
+     (sidebar eating into the space) and again just below it (sidebar gone,
+     suddenly more room despite the narrower viewport) — a genuinely
+     non-monotonic relationship a container query sidesteps entirely by
+     measuring what actually matters. */
+  container-type: inline-size;
 }
 
 .center-board {
@@ -565,14 +683,6 @@ button {
   position: absolute;
   inset: 0;
 }
-@keyframes laserFlip {
-  0% { transform: scaleX(0); }
-  60% { transform: scaleX(1.1); }
-  100% { transform: scaleX(1); }
-}
-.laser-reveal-card {
-  animation: laserFlip 0.35s ease-out;
-}
 .pile-group-clickable {
   cursor: pointer;
 }
@@ -583,7 +693,6 @@ button {
 }
 
 .your-cats-panel {
-  position: relative;
   background: rgba(15, 58, 30, 0.4);
   border-radius: var(--radius-md);
   padding: clamp(6px, calc(3.333px + 0.741vw), 10px) clamp(12px, calc(8px + 1.111vw), 18px);
@@ -591,11 +700,27 @@ button {
   flex-direction: column;
   gap: clamp(4px, calc(2px + 0.741vw), 8px);
 }
+.your-cats-header {
+  /* Default (narrow/mobile, panel below the board): score sits inline next
+     to the label to save vertical space. Switched to stacked (score under
+     the label) once .your-cats-panel becomes the single-card-wide sidebar
+     at 900px+ (see the @media block below) — a wide inline row would force
+     that narrow column wider than one card. */
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: clamp(4px, calc(2px + 0.741vw), 8px);
+}
 .your-cats-label {
   font-size: clamp(12px, calc(10px + 0.556vw), 15px);
   font-weight: 700;
   color: var(--cat-snow);
   text-align: center;
+}
+.your-cats-score {
+  font-size: clamp(11px, calc(9px + 0.556vw), 14px);
+  color: var(--cat-snow);
+  opacity: 0.8;
 }
 .your-cats-row {
   display: flex;
@@ -621,7 +746,52 @@ button {
   opacity: 1;
 }
 
+/* Wide screens: Your Cats moves to a single-card-wide sidebar running the
+   full height of .board-main (opponents row through the hand fan) on the
+   right of the board, instead of a full-width panel squeezed between the
+   opponents row above and the message log below. 900px reuses the same
+   number the fluid clamp() scaling above already treats as "fully grown"
+   (every card/gap size in this file maxes out by 900px), so the sidebar
+   only ever appears once everything else is already at full size — not a
+   new arbitrary cutoff.
+   grid-template-columns: 1fr auto (not flex) so .board-main's content stays
+   centered within the space it's actually given (matching how it's
+   centered everywhere else), while .your-cats-panel — the `auto` column,
+   stretched to match .board-main's full height via align-items: stretch —
+   takes only the width it needs and sits flush against the real right edge
+   of the board, rather than the two being centered as one clump together. */
+@media (min-width: 900px) {
+  .board-middle {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: stretch;
+  }
+  .your-cats-panel {
+    /* Without this, "HAL 9000's Cats"-style long names would happily stretch
+       the sidebar wider rather than wrap — this forces wrapping instead, so
+       the column stays pinned to exactly one card's width regardless of the
+       label text. */
+    max-width: calc(var(--card-w-hand) + 2 * clamp(12px, calc(8px + 1.111vw), 18px));
+  }
+  .your-cats-row {
+    /* Cards stack top-down in the single-card-wide column instead of
+       wrapping into a multi-row grid. */
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .your-cats-header {
+    /* The sidebar is only one card wide — an inline label+score row would
+       force it wider than that, so stack the score under the label instead. */
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
 .message-log {
+  /* .player-prompt-overlay (below) absolutely positions against this — moved
+     here from .your-cats-panel since that panel becomes a narrow sidebar on
+     wide screens (see .board-middle), too cramped for the big prompt text. */
+  position: relative;
   display: flex;
   flex-direction: column;
   /* flex-start (the default — set explicitly since it's load-bearing), not
@@ -834,6 +1004,21 @@ button {
   outline-offset: 2px;
 }
 
+@keyframes laserChaosPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(161, 112, 204, 0.7); }
+  50% { box-shadow: 0 0 0 6px rgba(161, 112, 204, 0.7); }
+}
+.card-laser-chosen {
+  /* Laser Pointer's chaos pick — deliberately a different color (the draw
+     pile's own purple, #a170cc, see .card-back-deck) than the accent-orange
+     used everywhere else for "you can act on this," since this cue means
+     the opposite: nobody can act, just watch. Same 1.4s pulse timing as
+     .card-selectable/.player-prompt-overlay-text's pulses, so all three
+     still read as the same family of "something's happening" cue. */
+  border: 3px solid #a170cc;
+  animation: laserChaosPulse 1.4s ease-in-out infinite;
+}
+
 @keyframes playerPromptTextPulse {
   0%, 100% { opacity: 0.6; text-shadow: 0 0 6px var(--accent-border); }
   50% { opacity: 1; text-shadow: 0 0 18px var(--accent-border); }
@@ -842,10 +1027,10 @@ button {
   /* Shared by both "Choose a sleeping cat" (a wake choice is pending) and
      "Your turn" (a normal turn to act, no more specific prompt applies) —
      same "big attention-grabbing overlay" pattern as .block-timer-overlay.
-     position: relative on .your-cats-panel (below) is what this absolutely
+     position: relative on .message-log (above) is what this absolutely
      positions against. pointer-events: none isn't load-bearing today (the
-     Your Cats panel's cards are never clickable anyway) but matches that
-     precedent in case this panel ever grows interactivity. */
+     message log has nothing clickable in it) but matches that precedent in
+     case that ever changes. */
   position: absolute;
   inset: 0;
   display: flex;

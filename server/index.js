@@ -1,6 +1,24 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { createRoom, joinRoom, getRoom, removeRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
+import { isRateLimited } from "./rateLimit.js";
+
+// createRoom/joinRoom are keyed by IP (handshake.address) rather than
+// socket.id — a fresh socket is free (just reconnect), a fresh IP isn't.
+// gameAction is keyed by socket.id instead: it's about capping how fast one
+// already-seated connection can flood actions, not about spam room creation,
+// and legitimate players sharing a household IP shouldn't throttle each
+// other's actual gameplay. Limits are deliberately generous for real use —
+// e.g. "Play Again" (see CLAUDE.md) calls createRoom again for every game a
+// group plays in a row, so a long session shouldn't come close to its cap —
+// while still capping a scripted flood loop hard. Known caveat: if the
+// eventual SiteGround deploy sits behind a reverse proxy that doesn't pass
+// the real client IP through, handshake.address could report the proxy's
+// own address for every connection, collapsing the createRoom/joinRoom
+// limits onto one shared bucket — worth checking once actually deployed.
+const CREATE_ROOM_LIMIT = { max: 20, windowMs: 10 * 60 * 1000 };
+const JOIN_ROOM_LIMIT = { max: 30, windowMs: 10 * 60 * 1000 };
+const GAME_ACTION_LIMIT = { max: 15, windowMs: 5 * 1000 };
 
 const PORT = process.env.PORT || 3001;
 
@@ -9,7 +27,42 @@ const io = new Server(httpServer, {
   cors: { origin: process.env.CLIENT_ORIGIN || "*" }
 });
 
-function roomState(room) {
+// Strips information a given viewer shouldn't be able to see over the wire —
+// every OTHER player's hand contents, the deck's exact remaining order, and
+// the identity of any cat still asleep — before a game state is sent to
+// them. This is a hidden-information card game, but `room.game` (the
+// server's own authoritative copy, used unredacted by every engine/AI call
+// in rooms.js) has no concept of "who's allowed to see what" — without this,
+// every socket in the room received the identical, fully-visible object, and
+// any player could read every opponent's hand and every unwoken cat's
+// identity straight out of the WebSocket frames via their browser's own
+// devtools, no exploit needed. Only ever applied to the outgoing copy; never
+// mutates `room.game` itself.
+function redactGameForPlayer(game, viewerPlayerId) {
+  if (!game) return game;
+  return {
+    ...game,
+    players: game.players.map(p =>
+      p.id === viewerPlayerId ? p : { ...p, hand: p.hand.map(() => ({ hidden: true })) }
+    ),
+    // Contents never matter to any client even for its own true owner — the
+    // draw pile is always rendered as a single face-down CardBack, never
+    // per-card (see CardBack's "deck" variant) — kept as an array of the
+    // same length rather than dropped outright, in case anything ever comes
+    // to rely on `deck.length`.
+    deck: game.deck.map(() => null),
+    // `id` is kept (unlike name/points/pairKey/wakesBonus) — SleepingCatsGrid
+    // uses it for `layoutId={`card-${cat.id}`}`, the mechanism that flies+
+    // flips a cat from its face-down slot into the waker's face-up Card (see
+    // CLAUDE.md's "Card animations" section). It's a safe opaque id to
+    // expose: ids are assigned to cats *before* the 12-cat shuffle, so a
+    // slot's id reveals nothing about which cat is actually there ahead of
+    // it being woken (at which point it's public anyway, id and all).
+    sleepingCats: game.sleepingCats.map(cat => (cat ? { id: cat.id, slot: cat.slot, awake: false } : null))
+  };
+}
+
+function roomState(room, viewerPlayerId) {
   return {
     roomName: room.roomName,
     status: room.status,
@@ -18,7 +71,7 @@ function roomState(room) {
     playerNames: room.playerNames,
     blockTimerSeconds: room.blockTimerSeconds,
     joinedSeats: [...room.seatToSocket.keys()],
-    game: room.game
+    game: redactGameForPlayer(room.game, viewerPlayerId)
   };
 }
 
@@ -33,8 +86,14 @@ function roomState(room) {
 // copies apart, so it played the same "shuffle" (and every deal-card ding)
 // twice, audibly overlapping.
 function broadcastRoom(room, excludeSocket) {
-  const emitter = excludeSocket ? excludeSocket.to(room.roomName) : io.to(room.roomName);
-  emitter.emit("roomState", roomState(room));
+  // Can't use a single Socket.IO room-wide emit here (as before) since each
+  // recipient now needs their *own* redacted view (see roomState/
+  // redactGameForPlayer above) — one shared payload would mean either
+  // nobody's hand is hidden, or everyone's is, including the recipient's own.
+  for (const [seatId, socketId] of room.seatToSocket) {
+    if (excludeSocket && socketId === excludeSocket.id) continue;
+    io.sockets.sockets.get(socketId)?.emit("roomState", roomState(room, seatId));
+  }
 
   // Once the game is over, free the room name for reuse — e.g. so a player
   // can immediately create a new room with the same name (OnlineSetup.jsx
@@ -54,6 +113,11 @@ function broadcastRoom(room, excludeSocket) {
 
 io.on("connection", socket => {
   socket.on("createRoom", ({ numPlayers, numAiOpponents, name, roomName, blockTimerSeconds }, callback) => {
+    if (isRateLimited(`createRoom:${socket.handshake.address}`, CREATE_ROOM_LIMIT)) {
+      callback({ error: "Too many rooms created — please wait a bit and try again." });
+      return;
+    }
+
     const { room, playerId, error } = createRoom({
       numPlayers,
       numAiOpponents,
@@ -80,12 +144,17 @@ io.on("connection", socket => {
     // forever. Handing over the state directly in the ack closes that race.
     // broadcastRoom excludes this socket (see its comment) since this ack
     // already delivered the same state to it.
-    callback({ roomName: room.roomName, playerId, ...roomState(room) });
+    callback({ roomName: room.roomName, playerId, ...roomState(room, playerId) });
     broadcastRoom(room, socket);
     scheduleNextStep(room, () => broadcastRoom(room));
   });
 
   socket.on("joinRoom", ({ roomName, name }, callback) => {
+    if (isRateLimited(`joinRoom:${socket.handshake.address}`, JOIN_ROOM_LIMIT)) {
+      callback({ error: "Too many join attempts — please wait a bit and try again." });
+      return;
+    }
+
     const result = joinRoom(roomName, socket.id, name);
     if (result.error) {
       callback({ error: result.error });
@@ -93,12 +162,20 @@ io.on("connection", socket => {
     }
 
     socket.join(result.room.roomName);
-    callback({ roomName: result.room.roomName, playerId: result.playerId, ...roomState(result.room) });
+    callback({ roomName: result.room.roomName, playerId: result.playerId, ...roomState(result.room, result.playerId) });
     broadcastRoom(result.room, socket);
     scheduleNextStep(result.room, () => broadcastRoom(result.room));
   });
 
   socket.on("gameAction", ({ roomName, type, args }) => {
+    // No callback on this event (fire-and-forget, see the comment on
+    // ACTIONS in rooms.js), so — same as the existing invalid-room/
+    // invalid-seat checks right below — a rate-limited action is just
+    // silently dropped rather than erroring back.
+    if (isRateLimited(`gameAction:${socket.id}`, GAME_ACTION_LIMIT)) {
+      return;
+    }
+
     const room = getRoom(roomName);
     if (!room || !room.game) {
       return;

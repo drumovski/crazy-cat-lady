@@ -5,7 +5,7 @@ import {
   playFish,
   playCatnip,
   playLaserPointer,
-  resolveLaserReveal,
+  resolveLaserChaos,
   discardCard,
   discardMathSet,
   respondToPendingAction,
@@ -15,7 +15,7 @@ import {
 } from "./game/engine.js";
 import { takeAiTurn } from "./game/ai.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "./game/blockTimer.js";
-import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "./game/timings.js";
+import { AI_THINK_DELAY_MS, LASER_CHAOS_DELAY_MS } from "./game/timings.js";
 import { onRoomState, sendGameAction, createRoom as createRoomClient, joinRoom as joinRoomClient } from "./multiplayer/socketClient.js";
 import ModeSelect from "./components/ModeSelect.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
@@ -92,7 +92,7 @@ export default function App() {
   // reaction to respond to), automatically decide and apply their move
   // after a short delay so the turn transition is readable.
   useEffect(() => {
-    if (screen !== "local" || !game || game.winner !== undefined || game.pendingLaserReveal) {
+    if (screen !== "local" || !game || game.winner !== undefined || game.pendingLaserChaos) {
       return undefined;
     }
 
@@ -121,19 +121,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [screen, game, aiPlayerIds]);
 
-  // A played Laser Pointer flips the top card face-up on the deck for
-  // everyone to see (game.pendingLaserReveal) before its effect — added to a
-  // hand, or the count-around wake choice — is actually applied. This isn't
-  // a decision anyone (human or AI) makes, so it always resolves on its own
+  // A played Laser Pointer highlights its randomly-chosen cat in place
+  // (game.pendingLaserChaos) before actually reassigning it — this isn't a
+  // decision anyone (human or AI) makes, so it always resolves on its own
   // timer regardless of whose turn it is.
   useEffect(() => {
-    if (screen !== "local" || !game || game.winner !== undefined || !game.pendingLaserReveal) {
+    if (screen !== "local" || !game || game.winner !== undefined || !game.pendingLaserChaos) {
       return undefined;
     }
 
     const timer = setTimeout(() => {
-      setGame(prevGame => ({ ...resolveLaserReveal(prevGame) }));
-    }, LASER_REVEAL_DELAY_MS);
+      setGame(prevGame => ({ ...resolveLaserChaos(prevGame) }));
+    }, LASER_CHAOS_DELAY_MS);
 
     return () => clearTimeout(timer);
   }, [screen, game]);

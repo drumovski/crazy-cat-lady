@@ -69,6 +69,12 @@ export default function Card({
   selected,
   selectable,
   eligible,
+  // Laser Pointer's chaos pick: this specific cat was just randomly chosen
+  // (game.pendingLaserChaos.catId), wherever it currently renders — an
+  // opponent's mini-cat row or the viewer's own cats panel. Pulses in place
+  // for the pending window; if it's actually moving, the same layoutId
+  // above handles flying it to its new owner once resolved.
+  chosen,
   size = "hand",
   variants = DEFAULT_VARIANTS,
   shareLayout = true
@@ -111,7 +117,7 @@ export default function Card({
       type="button"
       className={`card card-size-${size} card-${card.type}${imageSrc ? " card-has-art" : ""}${
         selected ? " card-selected" : ""
-      }${selectable ? " card-selectable" : ""}${eligible ? " card-eligible" : ""}`}
+      }${selectable ? " card-selectable" : ""}${eligible ? " card-eligible" : ""}${chosen ? " card-laser-chosen" : ""}`}
       onClick={onClick}
       disabled={!onClick}
     >

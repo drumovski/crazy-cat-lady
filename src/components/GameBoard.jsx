@@ -7,8 +7,9 @@ import SleepingCatsGrid from "./SleepingCatsGrid.jsx";
 import RulesModal from "./RulesModal.jsx";
 import SoundSettings from "./SoundSettings.jsx";
 import WinScreen, { WIN_SCREEN_DELAY_MS } from "./WinScreen.jsx";
+import confetti from "canvas-confetti";
 import { formatLastMessage } from "./formatLastMessage.js";
-import { isValidMathDiscard } from "../game/engine.js";
+import { isValidMathDiscard, getPlayerPoints } from "../game/engine.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import { CARD_FLY_DURATION_S } from "../game/timings.js";
 import { playSfxBatch, startClockTick, stopClockTick } from "../sound/sfx.js";
@@ -26,6 +27,11 @@ const EMPTY_SELECTION = {};
 // offset at all, in case a card mounts before the very first measurement
 // effect has run.
 const FALLBACK_DEAL_OFFSET = { x: 0, y: -60 };
+
+// On-brand rather than canvas-confetti's default rainbow palette — the
+// accent terracotta (--accent in index.css) plus a gold, cream, felt green,
+// and soft coral to sit comfortably against the green felt background.
+const CONFETTI_COLORS = ["#c67139", "#f4d35e", "#fff8ec", "#2e7d46", "#e8927c"];
 
 // Local hotseat only: how long to keep revealing a human player's own hand
 // after their turn-ending action, before switching to the next player — see
@@ -275,7 +281,7 @@ export default function GameBoard({
   const revealSeat = isOnline ? myPlayerId : delayedLocalRevealSeat;
 
   // Single gate for "don't accept input right now" — currently just the
-  // Laser Pointer reveal (not a decision, just a shared beat everyone
+  // Laser Pointer chaos pick (not a decision, just a shared beat everyone
   // watches before it resolves itself), but this is the one place to widen
   // once card-fly animations land (e.g. OR in a "some card is still mid-
   // flight" flag) rather than threading a second condition through
@@ -284,7 +290,7 @@ export default function GameBoard({
   // shows the *previous* player's (already-stale) hand, and without this a
   // fast click during that window could act on cards that aren't actually
   // the current player's.
-  const isBoardBusy = Boolean(game.pendingLaserReveal);
+  const isBoardBusy = Boolean(game.pendingLaserChaos);
   const hasWinner = game.winner !== undefined;
   const canInteract =
     !hasWinner &&
@@ -319,6 +325,21 @@ export default function GameBoard({
     if (game.sfxEvents && game.sfxEvents.length > 0 && playedSfxRef.current !== game.sfxEvents) {
       playedSfxRef.current = game.sfxEvents;
       playSfxBatch(game.sfxEvents);
+      // Fires alongside the "win" sound itself (finishTurn appends it to
+      // this same sfxEvents batch — see engine.js), not the delayed/faded-in
+      // WinScreen popup (WIN_SCREEN_DELAY_MS, ~3s later) — the celebratory
+      // beat should land the instant the game is actually won, same moment
+      // the applause sound does, not several seconds after. A big initial
+      // burst plus a smaller follow-up shortly after for fullness, both from
+      // the bottom-center of the viewport (canvas-confetti's default
+      // origin.x is 0.5) — canvas-confetti injects and cleans up its own
+      // full-viewport, pointer-events:none canvas, so this needs no
+      // DOM/cleanup handling here beyond the second burst's timer.
+      if (game.sfxEvents.includes("win")) {
+        const shared = { spread: 100, startVelocity: 55, ticks: 200, origin: { y: 1 }, colors: CONFETTI_COLORS };
+        confetti({ ...shared, particleCount: 120 });
+        setTimeout(() => confetti({ ...shared, particleCount: 60, spread: 130 }), 250);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.sfxEvents]);
@@ -459,6 +480,18 @@ export default function GameBoard({
   // their own more specific prompt above).
   const showYourTurnHint = canInteract && !showWakeChoiceHint && !showBlockPrompt;
 
+  // For everyone *except* the actual block target (who gets the big central
+  // .block-timer-overlay + "Block with X?" prompt above), the same countdown
+  // full-screen-center was confusing — they have no card to play and no
+  // decision to make, so a small badge on the target's own opponent panel is
+  // the more legible version for them. Never true in local hotseat: the
+  // shared screen already reveals the target's own hand the moment a block
+  // becomes pending (activePlayerId flips to targetId), so showBlockPrompt
+  // is always true there too — this only actually diverges for online
+  // bystanders (including the attacker) watching someone else's decision.
+  const bystanderBlockTargetId =
+    game.pendingAction && blockTimeLeft !== null && !showBlockPrompt ? game.pendingAction.targetId : null;
+
   const discardCards = discardSelection.map(i => activePlayer.hand[i]);
   const discardIsMathSet = discardSelection.length >= 2;
   const canConfirmDiscard =
@@ -526,9 +559,9 @@ export default function GameBoard({
         <div className="help-popover">
           <p>
             Play a <strong>Dog</strong> to wake a sleeping cat, a <strong>Fish</strong> to steal one, or{" "}
-            <strong>Catnip</strong> to put one back to sleep. <strong>Laser Pointer</strong> reveals the top
-            card. Otherwise discard a Number/Seagull/Snail card — or a matching pair/sum of Number cards for
-            extra draws.
+            <strong>Catnip</strong> to put one back to sleep. <strong>Laser Pointer</strong> throws a random
+            cat into chaos, sending it to a random player. Otherwise discard a Number/Seagull/Snail card — or
+            a matching pair/sum of Number cards for extra draws.
           </p>
           <div className="help-popover-actions">
             <button
@@ -560,235 +593,256 @@ export default function GameBoard({
         />
       )}
 
-      <div className="opponents-row">
-        {opponents.map(player => (
-          // Wrapper only exists to hold a ref to this opponent's on-screen
-          // position, for getDiscardFromOpponentVariants above — a plain
-          // block div here is invisible to the grid layout (it just becomes
-          // the grid cell PlayerPanel already filled anyway).
-          <div
-            key={player.id}
-            ref={el => {
-              if (el) opponentPanelRefs.current.set(player.id, el);
-              else opponentPanelRefs.current.delete(player.id);
-            }}
-          >
-            <PlayerPanel
-              player={player}
-              name={getName(player.id)}
-              isCurrentTurn={player.id === game.currentPlayerIndex}
-              catsSelectable={
-                canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
-              }
-              onCatClick={catIndex => handleCatClick(player.id, catIndex)}
+      {/* Wraps everything except the header — opponents/board/message-log/
+          hand all stacked together in .board-main — alongside
+          .your-cats-panel, so on wide screens the two can sit side by side
+          with Your Cats as a sidebar running the full height of .board-main,
+          not just squeezed between whatever happens to be directly above/
+          below it. See .board-middle in App.css. Purely a layout container
+          at the default (stacked) width — it and .board-main together just
+          stand in for what used to be .game-board's own gap between its
+          direct children. */}
+      <div className="board-middle">
+        <div className="board-main">
+          {/* opponents-row-four (exactly 4 opponents only) forces a strict
+              4-across-or-2x2 grid instead of auto-fit's usual continuous
+              column count — see .opponents-row-four in App.css for why. */}
+          <div className={`opponents-row${opponents.length === 4 ? " opponents-row-four" : ""}`}>
+            {opponents.map(player => (
+              // Wrapper only exists to hold a ref to this opponent's on-screen
+              // position, for getDiscardFromOpponentVariants above — a plain
+              // block div here is invisible to the grid layout (it just becomes
+              // the grid cell PlayerPanel already filled anyway).
+              <div
+                key={player.id}
+                ref={el => {
+                  if (el) opponentPanelRefs.current.set(player.id, el);
+                  else opponentPanelRefs.current.delete(player.id);
+                }}
+              >
+                <PlayerPanel
+                  player={player}
+                  name={getName(player.id)}
+                  isCurrentTurn={player.id === game.currentPlayerIndex}
+                  catsSelectable={
+                    canInteract && (selection.mode === "fish-target" || selection.mode === "catnip-target")
+                  }
+                  chosenCatId={game.pendingLaserChaos?.catId}
+                  onCatClick={catIndex => handleCatClick(player.id, catIndex)}
+                  blockCountdown={player.id === bystanderBlockTargetId ? blockTimeLeft : null}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="center-board">
+            {showBlockPrompt && blockTimeLeft !== null && (
+              <div className="block-timer-overlay">
+                <span className="block-timer-number">{blockTimeLeft}</span>
+              </div>
+            )}
+
+            <SleepingCatsGrid
+              sleepingCats={game.sleepingCats}
+              startIndex={0}
+              count={6}
+              onSlotClick={handleSlotClick}
+              selectable={canInteract && sleepingSelectable}
+            />
+
+            <div className="pile-column">
+              <div className="pile-group" ref={drawPileRef}>
+                <CardBack variant="deck" size="board" title="Draw pile" />
+              </div>
+              <div
+                className={`pile-group${canDiscardViaPile ? " pile-group-clickable" : ""}`}
+                onClick={canDiscardViaPile ? handleDiscardPileClick : undefined}
+                role={canDiscardViaPile ? "button" : undefined}
+                tabIndex={canDiscardViaPile ? 0 : undefined}
+              >
+                {/* AnimatePresence here so the *previous* top-of-pile card gets
+                    to play its exit animation when a new one replaces it
+                    (buried card fading out), instead of being swapped for the
+                    new one instantly — without it, only a card that's newly
+                    mounted (there was nothing before it) would ever animate.
+                    The wrapping .discard-pile-slot (fixed size, position:
+                    relative) plus `position: absolute` on every child (see
+                    App.css) makes the exiting and entering card overlap in
+                    place instead of stacking in normal flow — mode="popLayout"
+                    (the hand fan's fix for the same class of problem) doesn't
+                    reliably apply here, since this exiting card is also mid
+                    cross-tree layoutId flight (from wherever it was played
+                    from), which fights its exit-repositioning logic and leaves
+                    it position:relative, so the pile-group briefly holds two
+                    stacked card-heights and grows .center-board, shoving
+                    everything below it (Your Cats, message log, hand) down and
+                    back. A fixed-size slot with absolutely-positioned children
+                    sidesteps that entirely, regardless of how many cards
+                    AnimatePresence has mounted at once. */}
+                <div className="discard-pile-slot" ref={discardPileSlotRef}>
+                  <AnimatePresence mode="wait">
+                    {topDiscard ? (
+                      // A disabled Card (no onClick) silently swallows clicks
+                      // instead of letting them bubble to the pile-group's
+                      // handler above, so it needs its own (no-op) onClick to
+                      // stay non-disabled and let clicking the card itself
+                      // trigger the discard too. Keyed by the card's own id
+                      // (not just always "the top of the pile") so a new card
+                      // landing here re-mounts and replays its pop-in
+                      // animation, instead of Framer Motion treating it as the
+                      // same element with only its props updated.
+                      <Card
+                        key={topDiscard.id}
+                        card={topDiscard}
+                        size="board"
+                        onClick={canDiscardViaPile ? () => {} : undefined}
+                        shareLayout={!topDiscardFromOpponent}
+                        variants={
+                          topDiscardFromOpponent
+                            ? getDiscardFromOpponentVariants(topDiscard.id, game.lastMessage.playerId) ?? undefined
+                            : undefined
+                        }
+                      />
+                    ) : (
+                      <div className="card card-size-board sleeping-slot-empty discard-pile-empty-label">Discard</div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+
+            <SleepingCatsGrid
+              sleepingCats={game.sleepingCats}
+              startIndex={6}
+              count={6}
+              onSlotClick={handleSlotClick}
+              selectable={canInteract && sleepingSelectable}
             />
           </div>
-        ))}
-      </div>
 
-      <div className="center-board">
-        {game.pendingAction && blockTimeLeft !== null && (
-          <div className="block-timer-overlay">
-            <span className="block-timer-number">{blockTimeLeft}</span>
-          </div>
-        )}
-
-        <SleepingCatsGrid
-          sleepingCats={game.sleepingCats}
-          startIndex={0}
-          count={6}
-          onSlotClick={handleSlotClick}
-          selectable={canInteract && sleepingSelectable}
-        />
-
-        <div className="pile-column">
-          <div className="pile-group" ref={drawPileRef}>
-            {game.pendingLaserReveal && game.pendingLaserReveal.revealedCard ? (
-              // Laser Pointer flips the top card face-up in place, on top of
-              // the deck, so every player can see it before it resolves.
-              <div className="laser-reveal-card">
-                <Card card={game.pendingLaserReveal.revealedCard} size="board" />
+          <div className="message-log">
+            {/* Moved here from .your-cats-panel: the prompt overlay ("Your
+                turn"/"Choose a sleeping cat"/block prompt) needs a spot that
+                stays a sensible shape regardless of viewport width — on wide
+                screens .your-cats-panel becomes a narrow single-card sidebar
+                (see .board-middle in App.css), which the big pulsing prompt
+                text wouldn't fit well. .message-log stays full-width at
+                every size, and position: relative on it (below) is what
+                these absolutely position against. */}
+            {showWakeChoiceHint && (
+              <div className="player-prompt-overlay">
+                <span className="player-prompt-overlay-text">Choose a sleeping cat</span>
               </div>
-            ) : (
-              <CardBack variant="deck" size="board" title="Draw pile" />
             )}
-          </div>
-          <div
-            className={`pile-group${canDiscardViaPile ? " pile-group-clickable" : ""}`}
-            onClick={canDiscardViaPile ? handleDiscardPileClick : undefined}
-            role={canDiscardViaPile ? "button" : undefined}
-            tabIndex={canDiscardViaPile ? 0 : undefined}
-          >
-            {/* AnimatePresence here so the *previous* top-of-pile card gets
-                to play its exit animation when a new one replaces it
-                (buried card fading out), instead of being swapped for the
-                new one instantly — without it, only a card that's newly
-                mounted (there was nothing before it) would ever animate.
-                The wrapping .discard-pile-slot (fixed size, position:
-                relative) plus `position: absolute` on every child (see
-                App.css) makes the exiting and entering card overlap in
-                place instead of stacking in normal flow — mode="popLayout"
-                (the hand fan's fix for the same class of problem) doesn't
-                reliably apply here, since this exiting card is also mid
-                cross-tree layoutId flight (from wherever it was played
-                from), which fights its exit-repositioning logic and leaves
-                it position:relative, so the pile-group briefly holds two
-                stacked card-heights and grows .center-board, shoving
-                everything below it (Your Cats, message log, hand) down and
-                back. A fixed-size slot with absolutely-positioned children
-                sidesteps that entirely, regardless of how many cards
-                AnimatePresence has mounted at once. */}
-            <div className="discard-pile-slot" ref={discardPileSlotRef}>
-              <AnimatePresence mode="wait">
-                {topDiscard ? (
-                  // A disabled Card (no onClick) silently swallows clicks
-                  // instead of letting them bubble to the pile-group's
-                  // handler above, so it needs its own (no-op) onClick to
-                  // stay non-disabled and let clicking the card itself
-                  // trigger the discard too. Keyed by the card's own id
-                  // (not just always "the top of the pile") so a new card
-                  // landing here re-mounts and replays its pop-in
-                  // animation, instead of Framer Motion treating it as the
-                  // same element with only its props updated.
-                  <Card
-                    key={topDiscard.id}
-                    card={topDiscard}
-                    size="board"
-                    onClick={canDiscardViaPile ? () => {} : undefined}
-                    shareLayout={!topDiscardFromOpponent}
-                    variants={
-                      topDiscardFromOpponent
-                        ? getDiscardFromOpponentVariants(topDiscard.id, game.lastMessage.playerId) ?? undefined
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <div className="card card-size-board sleeping-slot-empty discard-pile-empty-label">Discard</div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
-
-        <SleepingCatsGrid
-          sleepingCats={game.sleepingCats}
-          startIndex={6}
-          count={6}
-          onSlotClick={handleSlotClick}
-          selectable={canInteract && sleepingSelectable}
-        />
-      </div>
-
-      <div className="your-cats-panel">
-        {showWakeChoiceHint && (
-          <div className="player-prompt-overlay">
-            <span className="player-prompt-overlay-text">Choose a sleeping cat</span>
-          </div>
-        )}
-        {showBlockPrompt && (
-          <div className="player-prompt-overlay">
-            <span className="player-prompt-overlay-text">
-              Block with {blockCounterType === "seagull" ? "Seagull" : "Snail"}?
-            </span>
-          </div>
-        )}
-        {showYourTurnHint && (
-          <div className="player-prompt-overlay">
-            <span className="player-prompt-overlay-text">Your turn</span>
-          </div>
-        )}
-        <span className="your-cats-label">
-          {isOnline ? "Your Cats" : `${getName(revealSeat)}'s Cats`}
-        </span>
-        <div className="your-cats-row">
-          <AnimatePresence>
-            {revealedPlayer.cats.map(cat => (
-              <Card key={cat.id} card={cat} size="hand" />
-            ))}
-          </AnimatePresence>
-          {revealedPlayer.cats.length === 0 && <span className="your-cats-empty">No cats yet</span>}
-        </div>
-      </div>
-
-      <div className="message-log">
-        {/* Always renders all 3 row slots (rather than only as many as
-            messageHistory currently has) so the log's height is reserved
-            up front — otherwise it visibly grows for the first 3 actions
-            of a game, pushing the hand fan below it down each time. Slots
-            with no message yet render a hidden (but height-reserving)
-            placeholder, except slot 0, which shows "No moves yet." until
-            the first real message arrives. */}
-        {[0, 1, 2].map(i => {
-          const text = messageHistory[i];
-          if (text) {
-            return (
-              <div className="message-log-row" key={i}>
-                <span className="message-log-text">{text}</span>
+            {showBlockPrompt && (
+              <div className="player-prompt-overlay">
+                <span className="player-prompt-overlay-text">
+                  Block with {blockCounterType === "seagull" ? "Seagull" : "Snail"}?
+                </span>
               </div>
-            );
-          }
-          if (i === 0) {
-            return (
-              <div className="message-log-row" key={i}>
-                <span className="message-log-empty">No moves yet.</span>
+            )}
+            {showYourTurnHint && (
+              <div className="player-prompt-overlay">
+                <span className="player-prompt-overlay-text">Your turn</span>
               </div>
-            );
-          }
-          return (
-            <div className="message-log-row message-log-row-hidden" key={i}>
-              <span className="message-log-text">&nbsp;</span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="hand-fan" ref={handFanRef}>
-        {/* popLayout: an exiting (played/discarded) card is pulled out of
-            layout flow immediately, so its siblings re-fan smoothly while
-            it's still finishing its own exit animation, rather than holding
-            the fan's width/spacing until the exit completes. */}
-        <AnimatePresence mode="popLayout">
-          {/* Gated on hasMeasuredOnce rather than always rendering: Framer
-              Motion locks in whatever `initial` a card's *first-ever* mount
-              saw and ignores later prop updates on that same still-mounted
-              instance — so on a brand new game, every starting hand card
-              (which would otherwise mount in the very same commit the
-              draw-pile/hand-fan refs above first measure) would be stuck
-              using FALLBACK_DEAL_OFFSET forever, not the real measured
-              value that lands a moment later. Not rendering them at all
-              until that first measurement is in hand sidesteps this
-              cleanly — genuinely mounting once, already correct, rather
-              than mounting-wrong-then-forcing-a-remount (tried that: since
-              AnimatePresence treats any key change as a real removal, the
-              wrongly-initialized instances got a full visible exit
-              animation instead of silently disappearing). This all
-              resolves inside useLayoutEffect, before the first paint, so
-              there's no visible gap where the hand is empty. */}
-          {hasMeasuredOnce &&
-            revealedPlayer.hand.map((card, cardIndex) => {
-              const isInteractive = canInteract;
-              const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
-              // Keyed by the card's own stable id, not its current index — a
-              // played/discarded card splices out and shifts every later
-              // card's index down, which would otherwise make React (and
-              // Framer Motion's layout animation) think the card at each
-              // shifted index changed identity instead of just moving.
-              return (
-                <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
-                  <div style={{ transform: style.transform }}>
-                    <Card
-                      card={card}
-                      size="hand"
-                      selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
-                      eligible={blockCounterType !== null && card.type === blockCounterType}
-                      onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
-                      variants={getDealVariants(cardIndex, revealedPlayer.hand.length)}
-                    />
+            )}
+            {/* Always renders all 3 row slots (rather than only as many as
+                messageHistory currently has) so the log's height is reserved
+                up front — otherwise it visibly grows for the first 3 actions
+                of a game, pushing the hand fan below it down each time. Slots
+                with no message yet render a hidden (but height-reserving)
+                placeholder, except slot 0, which shows "No moves yet." until
+                the first real message arrives. */}
+            {[0, 1, 2].map(i => {
+              const text = messageHistory[i];
+              if (text) {
+                return (
+                  <div className="message-log-row" key={i}>
+                    <span className="message-log-text">{text}</span>
                   </div>
+                );
+              }
+              if (i === 0) {
+                return (
+                  <div className="message-log-row" key={i}>
+                    <span className="message-log-empty">No moves yet.</span>
+                  </div>
+                );
+              }
+              return (
+                <div className="message-log-row message-log-row-hidden" key={i}>
+                  <span className="message-log-text">&nbsp;</span>
                 </div>
               );
             })}
-        </AnimatePresence>
+          </div>
+
+          <div className="hand-fan" ref={handFanRef}>
+            {/* popLayout: an exiting (played/discarded) card is pulled out of
+                layout flow immediately, so its siblings re-fan smoothly while
+                it's still finishing its own exit animation, rather than holding
+                the fan's width/spacing until the exit completes. */}
+            <AnimatePresence mode="popLayout">
+              {/* Gated on hasMeasuredOnce rather than always rendering: Framer
+                  Motion locks in whatever `initial` a card's *first-ever* mount
+                  saw and ignores later prop updates on that same still-mounted
+                  instance — so on a brand new game, every starting hand card
+                  (which would otherwise mount in the very same commit the
+                  draw-pile/hand-fan refs above first measure) would be stuck
+                  using FALLBACK_DEAL_OFFSET forever, not the real measured
+                  value that lands a moment later. Not rendering them at all
+                  until that first measurement is in hand sidesteps this
+                  cleanly — genuinely mounting once, already correct, rather
+                  than mounting-wrong-then-forcing-a-remount (tried that: since
+                  AnimatePresence treats any key change as a real removal, the
+                  wrongly-initialized instances got a full visible exit
+                  animation instead of silently disappearing). This all
+                  resolves inside useLayoutEffect, before the first paint, so
+                  there's no visible gap where the hand is empty. */}
+              {hasMeasuredOnce &&
+                revealedPlayer.hand.map((card, cardIndex) => {
+                  const isInteractive = canInteract;
+                  const style = getFanStyle(cardIndex, revealedPlayer.hand.length);
+                  // Keyed by the card's own stable id, not its current index — a
+                  // played/discarded card splices out and shifts every later
+                  // card's index down, which would otherwise make React (and
+                  // Framer Motion's layout animation) think the card at each
+                  // shifted index changed identity instead of just moving.
+                  return (
+                    <div key={card.id} className="hand-fan-slot" style={{ marginLeft: style.marginLeft }}>
+                      <div style={{ transform: style.transform }}>
+                        <Card
+                          card={card}
+                          size="hand"
+                          selected={discardSelection.includes(cardIndex) || selection.cardIndex === cardIndex}
+                          eligible={blockCounterType !== null && card.type === blockCounterType}
+                          onClick={isInteractive ? () => handleCardClick(cardIndex) : undefined}
+                          variants={getDealVariants(cardIndex, revealedPlayer.hand.length)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <div className="your-cats-panel">
+          <div className="your-cats-header">
+            <span className="your-cats-label">
+              {isOnline ? "Your Cats" : `${getName(revealSeat)}'s Cats`}
+            </span>
+            <span className="your-cats-score">{getPlayerPoints(revealedPlayer)} pts</span>
+          </div>
+          <div className="your-cats-row">
+            <AnimatePresence>
+              {revealedPlayer.cats.map(cat => (
+                <Card key={cat.id} card={cat} size="hand" chosen={cat.id === game.pendingLaserChaos?.catId} />
+              ))}
+            </AnimatePresence>
+            {revealedPlayer.cats.length === 0 && <span className="your-cats-empty">No cats yet</span>}
+          </div>
+        </div>
       </div>
     </div>
   );

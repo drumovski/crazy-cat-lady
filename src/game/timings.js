@@ -8,7 +8,9 @@
 // happens in one place — including any card-fly-animation duration this
 // grows to cover once Framer Motion is wired in.
 export const AI_THINK_DELAY_MS = 1200;
-export const LASER_REVEAL_DELAY_MS = 2000;
+// How long the Laser Pointer's randomly-chosen cat stays highlighted in
+// place, pending, before resolveLaserChaos actually reassigns it.
+export const LASER_CHAOS_DELAY_MS = 2000;
 
 // How long a card's fly/pop animation takes (Card.jsx's Framer Motion
 // layout + enter/exit transitions) — in seconds, since that's the unit

@@ -35,7 +35,7 @@ export default function WinScreen({ game, playerNames = [], onNewGame, onPlayAga
       transition={{ duration: WIN_SCREEN_FADE_DURATION_S }}
     >
       <div className="win-screen">
-        <h1>🎉 {getName(game.winner)} wins!</h1>
+        <h1>{getName(game.winner)} wins!</h1>
         <table className="win-table">
           <thead>
             <tr>

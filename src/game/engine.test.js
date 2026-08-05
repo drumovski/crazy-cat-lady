@@ -13,7 +13,7 @@ import {
   discardMathSet,
   isValidMathDiscard,
   playLaserPointer,
-  resolveLaserReveal,
+  resolveLaserChaos,
   checkWinner
 } from "./engine.js";
 
@@ -106,6 +106,27 @@ function testFishBlockedBySeagull() {
 
 testFishBlockedBySeagull();
 
+function testFishStealIntoGingerTomConflict() {
+  const game = createGame(2, 0);
+  game.players[0].hand[0] = { type: "fish" };
+  game.players[1].hand = game.players[1].hand.filter(c => c.type !== "seagull"); // no block
+
+  const gingerToms = game.sleepingCats.filter(c => c !== null && c.pairKey === "gingerTom");
+  const attackersMatch = wakeCatAtSlot(game, gingerToms[0].slot);
+  game.players[0].cats.push(attackersMatch); // attacker already holds one Ginger Tom
+  const targetCat = wakeCatAtSlot(game, gingerToms[1].slot);
+  game.players[1].cats.push(targetCat); // target holds the other one — the one being stolen
+
+  playFish(game, 0, 0, 1, 0);
+
+  console.log("Fish into Ginger Tom conflict — victim still loses the cat:", game.players[1].cats.length === 0);
+  console.log("Fish into Ginger Tom conflict — attacker does NOT gain it:", game.players[0].cats.length === 1);
+  console.log("It goes back to sleep in its own slot instead:", game.sleepingCats[targetCat.slot] !== null && game.sleepingCats[targetCat.slot].id === targetCat.id);
+  console.log("Message kind is fishStolenConflict:", game.lastMessage && game.lastMessage.kind === "fishStolenConflict");
+}
+
+testFishStealIntoGingerTomConflict();
+
 function testCatnip() {
   const game = createGame(2, 0);
 
@@ -140,30 +161,110 @@ function testCatnipBlockedBySnail() {
 
 testCatnipBlockedBySnail();
 
-function testLaserPointer() {
+// Laser Pointer's cat/destination pick both come from Math.random(), so
+// these tests temporarily replace it with a deterministic stand-in (a
+// common, dependency-free way to pin down "random" behavior in a plain
+// script like this) and restore the real one immediately after.
+function testLaserPointerMovesCatToOtherPlayer() {
   const game = createGame(2, 0);
-
   game.players[0].hand[0] = { type: "laser" };
-  game.deck.unshift({ type: "number", value: 2 }); // land on player 0 + 2 - 1 = player 1
+  // Only 2 players and only one candidate cat, so both the candidate and
+  // destination picks are already deterministic here regardless of the
+  // actual random value — no mocking needed for this one.
+  const cat = testGiveAnyCatToPlayer(game, game.players[0]);
 
-  const catsBefore = game.players[1].cats.length;
   playLaserPointer(game, 0, 0);
 
-  console.log("Card revealed face-up, effect not yet applied:", game.pendingLaserReveal && game.pendingLaserReveal.revealedCard.value === 2);
-  console.log("Turn not yet advanced during reveal:", game.currentPlayerIndex === 0);
+  console.log("Chaos picked the only candidate cat:", game.pendingLaserChaos && game.pendingLaserChaos.catId === cat.id);
+  console.log("Turn not yet advanced while pending:", game.currentPlayerIndex === 0);
 
-  resolveLaserReveal(game);
+  resolveLaserChaos(game);
 
-  console.log("Pending wake choice for player 1:", game.pendingWakeChoice && game.pendingWakeChoice.playerId);
-
-  const chosenSlot = game.sleepingCats.findIndex(c => c !== null);
-  respondToWakeChoice(game, 1, chosenSlot);
-
-  console.log("After Laser Pointer — player 1 gained a cat:", game.players[1].cats.length === catsBefore + 1);
+  console.log("Cat moved to the other player:", game.players[1].cats.some(c => c.id === cat.id));
+  console.log("Original owner no longer has it:", game.players[0].cats.length === 0);
   console.log("Current player (should be 1):", game.currentPlayerIndex);
 }
 
-testLaserPointer();
+testLaserPointerMovesCatToOtherPlayer();
+
+// The chaos must never leave a cat with its own owner — this needs 3+
+// players to actually distinguish "excluded outright" from "just didn't
+// happen to land there this time", since with only 2 players the single
+// other player is the only possible destination either way.
+function testLaserPointerNeverStaysWithOwner() {
+  const game = createGame(3, 0);
+  game.players[0].hand[0] = { type: "laser" };
+  const cat = testGiveAnyCatToPlayer(game, game.players[0]); // owner, and the only candidate
+
+  const originalRandom = Math.random;
+  Math.random = () => 0.99; // candidate index 0 (only option); destination: highest index among the *other* two players
+
+  playLaserPointer(game, 0, 0);
+  resolveLaserChaos(game);
+  Math.random = originalRandom;
+
+  console.log("Cat never stays with its own owner:", !game.players[0].cats.some(c => c.id === cat.id));
+  console.log("It landed on one of the other two players:", game.players[1].cats.some(c => c.id === cat.id) || game.players[2].cats.some(c => c.id === cat.id));
+}
+
+testLaserPointerNeverStaysWithOwner();
+
+function testLaserPointerNoCatsAwake() {
+  const game = createGame(2, 0);
+  game.players[0].hand[0] = { type: "laser" };
+  // Fresh game — nothing awake anywhere yet, nothing for the chaos to catch.
+
+  playLaserPointer(game, 0, 0);
+
+  console.log("No candidates — resolves immediately, no pending chaos:", !game.pendingLaserChaos);
+  console.log("Current player (should be 1):", game.currentPlayerIndex);
+}
+
+testLaserPointerNoCatsAwake();
+
+function testLaserPointerGuardedCatIsImmune() {
+  const game = createGame(2, 0);
+  game.players[0].hand[0] = { type: "laser" };
+  const guardedCat = testGiveAnyCatToPlayer(game, game.players[1]);
+  guardedCat.guarded = true;
+
+  playLaserPointer(game, 0, 0);
+
+  console.log("A guarded cat is never a valid candidate — resolves immediately:", !game.pendingLaserChaos);
+}
+
+testLaserPointerGuardedCatIsImmune();
+
+function testLaserPointerGingerTomConflict() {
+  const game = createGame(2, 0);
+  game.players[0].hand[0] = { type: "laser" };
+
+  const gingerToms = game.sleepingCats.filter(c => c !== null && c.pairKey === "gingerTom");
+  const victimsMatch = wakeCatAtSlot(game, gingerToms[0].slot);
+  game.players[1].cats.push(victimsMatch); // player 1 already holds one Ginger Tom
+  const movingCat = wakeCatAtSlot(game, gingerToms[1].slot);
+  game.players[0].cats.push(movingCat); // player 0 holds the other one
+
+  const originalRandom = Math.random;
+  // Two candidates now (movingCat, victimsMatch) — sequential mock so each
+  // Math.random() call in playLaserPointer gets its own value: pick
+  // candidate index 0 (movingCat, player 0's). The destination pick only
+  // has one option in a 2-player game (player 1, excluding the owner), so
+  // its exact mock value doesn't matter — player 1 already has the other
+  // Ginger Tom either way.
+  const mockValues = [0.01, 0.99];
+  let callIndex = 0;
+  Math.random = () => mockValues[callIndex++];
+
+  playLaserPointer(game, 0, 0);
+  resolveLaserChaos(game);
+  Math.random = originalRandom;
+
+  console.log("Ginger Tom conflict — cat went back to sleep, not to player 1:", game.players[1].cats.length === 1 && game.players[0].cats.length === 0);
+  console.log("It's back asleep in its own slot:", game.sleepingCats[movingCat.slot] !== null && game.sleepingCats[movingCat.slot].id === movingCat.id);
+}
+
+testLaserPointerGingerTomConflict();
 
 function testAiAutoBlocks() {
   const game = createGame(2, 0);
@@ -308,11 +409,11 @@ function testPointsWinCondition() {
   const game = createGame(2, 0);
   const player = game.players[0];
 
-  // 20 + 15 + 15 = 50 points from just 3 cats — should win despite < 5 cats
+  // 22 + 17 + 16 = 55 points from just 3 cats — should win despite < 5 cats
   player.cats = [
-    { type: "cat", id: 100, name: "Maine Coon", points: 20 },
-    { type: "cat", id: 101, name: "Calico", points: 15 },
-    { type: "cat", id: 102, name: "Persian", points: 15 }
+    { type: "cat", id: 100, name: "Maine Coon", points: 22 },
+    { type: "cat", id: 101, name: "Calico", points: 17 },
+    { type: "cat", id: 102, name: "Ginger Tom", points: 16 }
   ];
 
   const winnerId = checkWinner(game);
@@ -389,7 +490,7 @@ function testWinThresholdScalesWithFourPlayers() {
   const game = createGame(4, 0);
   const player = game.players[0];
 
-  // 4 cats, well under 40 points — should still win on cat count alone
+  // 4 cats, well under 45 points — should still win on cat count alone
   player.cats = [
     { type: "cat", id: 200, name: "Bengal", points: 5 },
     { type: "cat", id: 201, name: "Siamese", points: 5 },
@@ -406,13 +507,18 @@ function testPointsThresholdScalesWithFourPlayers() {
   const game = createGame(4, 0);
   const player = game.players[0];
 
-  // 20 + 20 = 40 points from just 2 cats — should win despite < 4 cats
+  // 22 + 13 + 12 = 47 points from just 3 cats — should win despite < 4 cats.
+  // (Note: 2 cats can no longer reach the 45-point threshold on their own —
+  // even two Maine Coons, the single highest-value cat at 22 each, only
+  // total 44 — so this now needs 3 cats to demonstrate the points-win path,
+  // same idea as the old 2-cat version, just adjusted to the new roster.)
   player.cats = [
-    { type: "cat", id: 210, name: "Maine Coon", points: 20 },
-    { type: "cat", id: 211, name: "Maine Coon (test dupe)", points: 20 }
+    { type: "cat", id: 210, name: "Maine Coon", points: 22 },
+    { type: "cat", id: 211, name: "Toyger", points: 13 },
+    { type: "cat", id: 212, name: "Bombay", points: 12 }
   ];
 
-  console.log("4-player game wins at 40 points with only 2 cats:", checkWinner(game) === 0);
+  console.log("4-player game wins at 45+ points with only 3 cats:", checkWinner(game) === 0);
 }
 
 testPointsThresholdScalesWithFourPlayers();
@@ -422,7 +528,7 @@ function testTwoPlayerThresholdUnaffected() {
   const player = game.players[0];
 
   // 4 cats worth 30 points total — should NOT win in a 2-player game
-  // (needs 5 cats or 50 points)
+  // (needs 5 cats or 55 points)
   player.cats = [
     { type: "cat", id: 220, name: "Toyger", points: 10 },
     { type: "cat", id: 221, name: "Ragdoll", points: 10 },
@@ -438,7 +544,10 @@ testTwoPlayerThresholdUnaffected();
 function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
   const game = createGame(3, 0);
 
-  // All 12 cats distributed, 4 each, nobody hits the 5-cat threshold.
+  // All 12 cats distributed, 4 each, nobody hits the 5-cat OR 55-point
+  // threshold (player 1's total must stay under 55, not just be the
+  // highest, or they'd win via the ordinary threshold check above instead
+  // of actually exercising this tiebreak fallback path).
   // Player 1 has the most points and should win the tiebreak.
   game.sleepingCats = game.sleepingCats.map(() => null);
   game.players[0].cats = [
@@ -448,9 +557,9 @@ function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
     { type: "cat", id: 303, points: 10 }
   ];
   game.players[1].cats = [
-    { type: "cat", id: 304, points: 20 },
+    { type: "cat", id: 304, points: 15 },
     { type: "cat", id: 305, points: 15 },
-    { type: "cat", id: 306, points: 15 },
+    { type: "cat", id: 306, points: 10 },
     { type: "cat", id: 307, points: 5 }
   ];
   game.players[2].cats = [

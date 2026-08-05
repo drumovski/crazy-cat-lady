@@ -45,13 +45,32 @@ testAiCatnipsRichestOpponent();
 function testAiPlaysLaserWhenNothingBetter() {
   const game = createGame(2, 0);
   game.players[0].hand = [{ type: "laser" }, { type: "number", value: 5 }];
-  // player 1 has no cats, so Fish/Catnip wouldn't apply anyway
+  // No Fish/Catnip in hand either way, but Laser Pointer itself also needs
+  // an opponent with an unguarded cat now (see the skip test below) — give
+  // player 1 one so this is actually testing "nothing better in hand", not
+  // accidentally testing the skip case instead.
+  game.players[1].cats = [{ type: "cat", id: 1, name: "Bengal", points: 5 }];
 
   const decision = chooseAiTurn(game, 0);
   console.log("AI plays Laser Pointer when nothing better applies:", decision.type === "laser");
 }
 
 testAiPlaysLaserWhenNothingBetter();
+
+function testAiSkipsLaserWhenOnlyItsOwnCatIsAwake() {
+  const game = createGame(2, 0);
+  game.players[0].hand = [{ type: "laser" }, { type: "number", value: 5 }];
+  // The only awake cat belongs to the AI itself — no opponent has one. Since
+  // the chaos always sends the picked cat to someone *other* than its
+  // current owner, playing Laser Pointer here could only ever give this cat
+  // away for nothing, so the AI should skip it and discard instead.
+  game.players[0].cats = [{ type: "cat", id: 1, name: "Bengal", points: 5 }];
+
+  const decision = chooseAiTurn(game, 0);
+  console.log("AI skips Laser Pointer when only its own cat is awake:", decision.type === "discard");
+}
+
+testAiSkipsLaserWhenOnlyItsOwnCatIsAwake();
 
 function testAiDiscardsMathPairWhenNoOtherOptions() {
   const game = createGame(2, 0);
@@ -97,16 +116,20 @@ function testAiFallsBackToSingleDiscard() {
 
 testAiFallsBackToSingleDiscard();
 
-function testAiSkipsFishWhenNoOpponentHasCats() {
+function testAiSkipsFishAndLaserWhenNoOpponentHasCats() {
   const game = createGame(2, 0);
   game.players[0].hand = [{ type: "fish" }, { type: "laser" }];
-  // no opponent has cats
+  // No opponent has cats, so both Fish (no target) and now Laser Pointer
+  // (no valid "someone else" to send a cat to) get skipped — falls all the
+  // way through to the generic discard fallback (nothing number/seagull/
+  // snail in this hand, so it defaults to index 0, discarding the Fish).
 
   const decision = chooseAiTurn(game, 0);
-  console.log("AI skips Fish with no valid target, falls through to Laser:", decision.type === "laser");
+  console.log("AI skips Fish and Laser with no opponent cats, falls through to discard:", decision.type === "discard");
+  console.log("Defaults to discarding index 0:", decision.cardIndex === 0);
 }
 
-testAiSkipsFishWhenNoOpponentHasCats();
+testAiSkipsFishAndLaserWhenNoOpponentHasCats();
 
 function testTakeAiTurnAppliesTheChosenAction() {
   const game = createGame(2, 0);

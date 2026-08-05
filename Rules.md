@@ -5,9 +5,9 @@ you can!
 
 **How to win**
 
-2-3 Players: collect 5 cats or 50 cat points
+2-3 Players: collect 5 cats or 55 cat points
 
-4-5 Players: collect 4 cats or 40 cat points
+4-5 Players: collect 4 cats or 45 cat points
 
 Or
 
@@ -18,11 +18,9 @@ Have the most points once all cats are awake.
 There are 12 cat cards face down in the middle, a draw pile and a
 discard pile. Each player starts with 5 draw cards in their hand. The
 cats in the middle are sleeping and need to be awakened to join your
-crazy cat lady collection. There are three ways to wake up a cat:
+crazy cat lady collection. There are two ways to wake up a cat:
 
 -   Play a dog card, or
-
--   Take a chance with a crazy laser pointer card, or
 
 -   Discard 3 number cards with the same number (three of a kind).
 
@@ -35,35 +33,35 @@ ensure you always have 5.
 
 1.  Maine Coon -- 20 cat points
 
-2.  Ginger Tom -- 15 cat points (you can only have one Ginger Tom, they
+2.  Calico -- 16 cat points
+
+3.  Ginger Tom -- 15 cat points (you can only have one Ginger Tom, they
     hate each other!)
 
-3.  2nd Ginger Tom -- 15 cat points
+4.  2nd Ginger Tom -- 15 cat points
 
-4.  Calico -- 15 cat points
+5.  Persian -- 14 cat points
 
-5.  Persian -- 15 cat points
+6.  Toyger -- 13 cat points
 
-6.  Toyger -- 10 cat points
+7.  Bombay -- 12 cat points
 
-7.  Ragdoll -- 10 cat points
-
-8.  Bombay -- 10 cat points
+8.  Ragdoll -- 11 cat points
 
 9.  Russian Blue -- 10 cat points
 
-10. Siamese -- 5 cat points
+10. Bengal -- 9 cat points
 
-11. Bengal -- 5 cat points
+11. Siamese -- 8 cat points
 
-12. Sphynx -- 5 cat points (if awakened, is cold and wakes another cat
+12. Sphynx -- 6 cat points (if awakened, is cold and wakes another cat
     to keep warm!)
 
-**68 draw cards**
+**67 draw cards**
 
 40 Number cards
 
-9 Dog cards
+10 Dog cards
 
 4 Fish cards
 
@@ -73,7 +71,7 @@ ensure you always have 5.
 
 3 Snail cards
 
-5 Laser pointer cards
+3 Laser pointer cards
 
 **Number cards**: numbered 1 - 10
 
@@ -118,15 +116,13 @@ spot).
 is a time limit to play this card dependent on game settings.
 
 **Laser pointer card**: Laser pointers throw everything into chaos!
-After playing a laser pointer, the top draw card is turned up for
-everyone to see and one of two things happen:
-
--   If it's a number card, the number value is counted around the
-    players starting with you (eenie meenie moe style) and where it
-    lands, that player chooses a cat to wake up; or
-
--   If it's a special card (dog, fish, catnip etc) it simply goes into
-    your hand and replaces the laser pointer
+After playing a laser pointer, one random awake cat -- from anyone's
+collection, including your own -- gets caught in the chaos. It's
+spotlighted for a moment so everyone can see which cat it is, then sent
+to a random *other* player -- it always moves to someone new, never
+back to whoever already had it (unless the Ginger Tom rule stops it --
+see below). Guarded cats (see Dog card) are immune; the chaos can
+never catch one. If no cats are awake yet, nothing happens.
 
 > Notes:
 >
@@ -136,11 +132,13 @@ everyone to see and one of two things happen:
 > are if you want to wake that cat back up!
 >
 > If you have a Ginger Tom cat in your collection, and pick the other
-> Ginger Tom from the sleeping cats, it will go back to sleep
-> immediately, and you will not be able to choose another cat. You lose
-> the dog / laser pointer action and it's the end of your turn. You also
-> can't steal the second Ginger Tom if you have one already. They really
-> hate each other!
+> Ginger Tom from the sleeping cats with a dog card, it will go back to
+> sleep immediately, and you will not be able to choose another cat. You
+> lose the dog action and it's the end of your turn. You also can't
+> steal the second Ginger Tom if you have one already -- and if the
+> laser pointer's chaos tries to send a Ginger Tom to someone who
+> already has the other one, it goes back to sleep instead of reaching
+> them too. They really hate each other!
 >
 > If you steal the Sphinx Cat from another player, it wont use it's
 > special ability and wake another cat. However, if it's put back to

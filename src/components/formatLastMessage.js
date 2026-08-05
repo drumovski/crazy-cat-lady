@@ -1,12 +1,3 @@
-const CARD_TYPE_LABELS = {
-  dog: "Dog",
-  fish: "Fish",
-  seagull: "Seagull",
-  catnip: "Catnip",
-  snail: "Snail",
-  laser: "Laser Pointer"
-};
-
 // game.lastMessage is data ({ kind, ...fields }), not pre-formatted text, so
 // it can be rendered using display names instead of a hardcoded "Player N" —
 // and, critically, so the pronoun can flip based on who's actually looking.
@@ -32,22 +23,20 @@ export function formatLastMessage(message, getName, isSelf, blockTimerSeconds) {
     }
     case "fishStolenConfirm":
       return `${who} stole ${getName(message.targetId)}'s ${message.catName} with ${ownPossessive} Fish!`;
+    case "fishStolenConflict":
+      return `${who} tried to steal ${getName(message.targetId)}'s ${message.catName} with a Fish, but already had a matching cat — it went back to sleep instead.`;
     case "catnippedConfirm":
       return `${who} put ${getName(message.targetId)}'s ${message.catName} back to sleep with ${ownPossessive} Catnip!`;
-    case "laserRevealing":
-      return isSelf ? "You played Laser Pointer — revealing the top card..." : `${who} played Laser Pointer — revealing the top card...`;
-    case "laserNoCards":
-      return isSelf ? "No cards left to reveal." : `${who} had no cards left to reveal.`;
-    case "laserNoSlots":
+    case "laserChaosPicked":
+      return `${who} played Laser Pointer — ${getName(message.ownerId)}'s ${message.catName} got caught in the chaos!`;
+    case "laserChaosNoCats":
       return isSelf
-        ? "Revealed a number card, but no sleeping cats are left to wake."
-        : `${who} revealed a number card, but no sleeping cats were left to wake.`;
-    case "laserReveal":
-      return isSelf
-        ? `Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to your hand.`
-        : `${who}'s Laser Pointer revealed a ${CARD_TYPE_LABELS[message.cardType]} — added to ${ownPossessive} hand.`;
-    case "laserWakeChoice":
-      return `${who} played Laser Pointer — the count landed on ${getName(message.targetId)}, who may wake a sleeping cat!`;
+        ? "You played Laser Pointer, but no cats were awake for the chaos to catch."
+        : `${who} played Laser Pointer, but no cats were awake for the chaos to catch.`;
+    case "laserChaosMoved":
+      return `The chaos sends ${getName(message.ownerId)}'s ${message.catName} to ${getName(message.destinationPlayerId)}!`;
+    case "laserChaosConflict":
+      return `The chaos tried to send ${getName(message.ownerId)}'s ${message.catName} to ${getName(message.destinationPlayerId)}, but they already have a matching cat — it went back to sleep instead.`;
     case "wokeCat":
       return `${who} woke a ${message.catName} Cat!`;
     case "wokeBonusCat":

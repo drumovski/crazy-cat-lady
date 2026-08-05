@@ -4,7 +4,7 @@ import {
   playFish,
   playCatnip,
   playLaserPointer,
-  resolveLaserReveal,
+  resolveLaserChaos,
   discardCard,
   discardMathSet,
   respondToPendingAction,
@@ -14,10 +14,21 @@ import {
 } from "../src/game/engine.js";
 import { takeAiTurn, pickRandomAiName } from "../src/game/ai.js";
 import { isValidBlockTimerSeconds, DEFAULT_BLOCK_TIMER_SECONDS } from "../src/game/blockTimer.js";
-import { AI_THINK_DELAY_MS, LASER_REVEAL_DELAY_MS } from "../src/game/timings.js";
+import { AI_THINK_DELAY_MS, LASER_CHAOS_DELAY_MS } from "../src/game/timings.js";
 
 const ROOM_NAME_MIN_LENGTH = 4;
 const ROOM_NAME_MAX_LENGTH = 16;
+
+// The only values the real UI ever offers (SetupScreen.jsx/OnlineSetup.jsx's
+// player-count dropdown). Enforced here too since numPlayers is structural —
+// every seat/array below is sized off it, and createGame's own deal loop
+// runs numPlayers times — so an unvalidated client-sent value (e.g. a client
+// sending numPlayers: 999999 with numAiOpponents: 999998, needing only its
+// own one human socket to fill the lone remaining seat) could block the
+// server's single event loop for everyone, or throw an uncaught RangeError
+// on allocation with no top-level handler to catch it.
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 5;
 
 // How long a room is allowed to sit with zero connected human sockets before
 // it's swept away — covers both a "waiting" room nobody ever finished
@@ -102,6 +113,18 @@ function assignSeat(room, socketId, name) {
 // numAiOpponents seats are always the LAST numAiOpponents seats (e.g. 4
 // players / 2 AI -> seats 2,3 are AI). The creator always gets seat 0.
 export function createRoom({ numPlayers, numAiOpponents, socketId, name, roomName, blockTimerSeconds }) {
+  // A malicious/buggy client could send anything here — reject outright
+  // rather than clamping to a "safe" value, since there's no sensible
+  // default for a field this structural (see MIN_PLAYERS/MAX_PLAYERS above).
+  if (
+    !Number.isInteger(numPlayers) ||
+    numPlayers < MIN_PLAYERS ||
+    numPlayers > MAX_PLAYERS ||
+    !Number.isInteger(numAiOpponents) ||
+    numAiOpponents < 0
+  ) {
+    return { error: "Invalid player configuration" };
+  }
   if (numAiOpponents >= numPlayers) {
     return { error: "Need at least one human seat" };
   }
@@ -274,24 +297,24 @@ function getDecisionMakerId(game) {
     : game.currentPlayerIndex;
 }
 
-// After any state change, checks whether the game is mid-Laser-Pointer-reveal
-// or an AI player owes the next move (turn or reaction) and — if so —
+// After any state change, checks whether the game is mid-Laser-Pointer-chaos
+// pick or an AI player owes the next move (turn or reaction) and — if so —
 // resolves it after a short delay, calling onUpdate so the caller can
 // broadcast the new state. Chains automatically as long as the following
-// step is also automatic (reveal resolution, or another AI decision).
+// step is also automatic (chaos resolution, or another AI decision).
 export function scheduleNextStep(room, onUpdate) {
   if (!room.game || room.game.winner !== undefined) {
     return;
   }
 
-  // A pending reveal isn't anyone's decision — human or AI — so it always
-  // resolves on its own timer regardless of whose turn it is.
-  if (room.game.pendingLaserReveal) {
+  // A pending chaos pick isn't anyone's decision — human or AI — so it
+  // always resolves on its own timer regardless of whose turn it is.
+  if (room.game.pendingLaserChaos) {
     setTimeout(() => {
-      resolveLaserReveal(room.game);
+      resolveLaserChaos(room.game);
       onUpdate();
       scheduleNextStep(room, onUpdate);
-    }, LASER_REVEAL_DELAY_MS);
+    }, LASER_CHAOS_DELAY_MS);
     return;
   }
 

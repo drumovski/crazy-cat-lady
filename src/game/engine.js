@@ -17,9 +17,9 @@ export function createDeck() {
     }
   }
 
-  // Add 9 Dog cards (wakes a cat): 7 plain variants (`variant` 1-7, each just
-  // a different illustration with identical behavior), plus two with a real
-  // gameplay effect baked into `dogEffect` instead:
+  // Add 10 Dog cards (wakes a cat): 8 plain variants (`variant` 1-8, each
+  // just a different illustration with identical behavior), plus two with a
+  // real gameplay effect baked into `dogEffect` instead:
   //   "guard"  (Guard Dog) — the woken cat becomes guarded (see playDog,
   //                          playFish, playCatnip): it can never be stolen
   //                          or put back to sleep.
@@ -28,7 +28,7 @@ export function createDeck() {
   //                          (see playDog).
   // `variant` (image-only) and `dogEffect` (gameplay effect, own dedicated
   // art) are mutually exclusive on a given card.
-  const PLAIN_DOG_VARIANTS = [1, 2, 3, 4, 5, 6, 7];
+  const PLAIN_DOG_VARIANTS = [1, 2, 3, 4, 5, 6, 7, 8];
   for (const variant of PLAIN_DOG_VARIANTS) {
     deck.push({ type: "dog", variant, id: nextId++ });
   }
@@ -55,8 +55,8 @@ export function createDeck() {
     deck.push({ type: "snail", id: nextId++ });
   }
 
-  // Add 5 Laser Pointer cards
-  for (let i = 0; i < 5; i++) {
+  // Add 3 Laser Pointer cards
+  for (let i = 0; i < 3; i++) {
     deck.push({ type: "laser", id: nextId++ });
   }
 
@@ -96,8 +96,8 @@ export function dealHands(deck, numPlayers, handSize = 5) {
 // (Card.jsx) needs a way to tell them apart to show their two distinct
 // illustrations (Ginger1.png/Ginger2.png), same pattern as Dog's `variant`.
 //
-// CAT_ID_OFFSET: cat ids start well past createDeck()'s highest id (68 deck
-// cards, ids 0-67) so a cat can never share an id with a deck/hand/discard
+// CAT_ID_OFFSET: cat ids start well past createDeck()'s highest id (67 deck
+// cards, ids 0-66) so a cat can never share an id with a deck/hand/discard
 // card. Sleeping cats and deck cards render simultaneously in the same game
 // and both key their Framer Motion `layoutId` off `card-${id}` (Card.jsx/
 // CardBack.jsx) — a colliding id made two unrelated cards share one
@@ -109,15 +109,15 @@ export function createCats() {
     { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 1 },
     { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 2 },
     { name: "Maine Coon", points: 20 },
-    { name: "Calico", points: 15 },
-    { name: "Persian", points: 15 },
-    { name: "Toyger", points: 10 },
-    { name: "Ragdoll", points: 10 },
-    { name: "Bombay", points: 10 },
+    { name: "Calico", points: 16 },
+    { name: "Persian", points: 14 },
+    { name: "Toyger", points: 13 },
+    { name: "Ragdoll", points: 11 },
+    { name: "Bombay", points: 12 },
     { name: "Russian Blue", points: 10 },
-    { name: "Sphynx", points: 5, wakesBonus: true },
-    { name: "Siamese", points: 5 },
-    { name: "Bengal", points: 5 }
+    { name: "Sphynx", points: 6, wakesBonus: true },
+    { name: "Siamese", points: 8 },
+    { name: "Bengal", points: 9 }
   ];
 
   return roster.map((cat, i) => ({ type: "cat", id: CAT_ID_OFFSET + i, ...cat }));
@@ -185,7 +185,7 @@ export function validateTurn(game, playerId) {
     return false;
   }
 
-  if (game.pendingAction || game.pendingWakeChoice || game.pendingLaserReveal) {
+  if (game.pendingAction || game.pendingWakeChoice || game.pendingLaserChaos) {
     console.log("Another action is still awaiting a response!");
     return false;
   }
@@ -285,7 +285,10 @@ const TARGETED_CARD_CONFIG = {
     counterType: "seagull",
     counterLabel: "Seagull",
     resolve: (game, attackerId, targetId, targetCatIndex) => resolveFishSteal(game, attackerId, targetId, targetCatIndex),
-    resolvedMessageKind: "fishStolen"
+    resolvedMessageKind: "fishStolen",
+    // Only Fish can conflict — Catnip never adds a cat to anyone's
+    // collection, so there's nothing for it to conflict with.
+    conflictMessageKind: "fishStolenConflict"
   },
   catnip: {
     notThisCardMessage: "That's not Catnip!",
@@ -356,13 +359,17 @@ function playCardAgainstOpponent(game, playerId, cardIndex, targetPlayerId, targ
   }
 
   const targetCatName = targetPlayer.cats[targetCatIndex].name;
-  config.resolve(game, playerId, targetPlayerId, targetCatIndex);
-  finishTurn(game, {
-    playerId: targetPlayerId,
-    kind: config.resolvedMessageKind,
-    attackerId: playerId,
-    catName: targetCatName
-  });
+  const joined = config.resolve(game, playerId, targetPlayerId, targetCatIndex);
+
+  // Only Fish's config has a conflictMessageKind (see TARGETED_CARD_CONFIG)
+  // — joined === false only means anything for that one, since Catnip's
+  // resolve doesn't return a meaningful value at all.
+  const message =
+    config.conflictMessageKind && joined === false
+      ? { playerId, kind: config.conflictMessageKind, targetId: targetPlayerId, catName: targetCatName }
+      : { playerId: targetPlayerId, kind: config.resolvedMessageKind, attackerId: playerId, catName: targetCatName };
+
+  finishTurn(game, message);
 
   return game;
 }
@@ -422,8 +429,13 @@ export function respondToPendingAction(game, targetPlayerId, blockCardIndex) {
 
   game.sfxEvents = [];
   if (action.type === "fish") {
-    resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
-    finishTurn(game, { playerId: action.attackerId, kind: "fishStolenConfirm", targetId: targetPlayerId, catName });
+    const joined = resolveFishSteal(game, action.attackerId, action.targetId, action.catIndex);
+    finishTurn(game, {
+      playerId: action.attackerId,
+      kind: joined ? "fishStolenConfirm" : "fishStolenConflict",
+      targetId: targetPlayerId,
+      catName
+    });
   } else {
     resolveCatnip(game, action.targetId, action.catIndex);
     finishTurn(game, { playerId: action.attackerId, kind: "catnippedConfirm", targetId: targetPlayerId, catName });
@@ -514,11 +526,15 @@ export function respondToWakeChoiceAsAi(game, playerId) {
   return respondToWakeChoice(game, playerId, randomSlot);
 }
 
+// Returns whether the cat actually joined the attacker's collection (false
+// if it bounced back to sleep instead — the attacker already held the other
+// Ginger Tom). The victim loses the cat either way; callers need this to
+// pick between the ordinary "stole it" message and a conflict-specific one.
 export function resolveFishSteal(game, attackerId, targetId, targetCatIndex) {
   const attacker = game.players[attackerId];
   const targetPlayer = game.players[targetId];
   const [stolenCat] = targetPlayer.cats.splice(targetCatIndex, 1);
-  giveCatToPlayer(game, attacker, stolenCat);
+  return giveCatToPlayer(game, attacker, stolenCat);
 }
 
 export function resolveCatnip(game, targetId, targetCatIndex) {
@@ -557,12 +573,19 @@ export function finishTurn(game, lastMessage = null) {
   advanceTurn(game);
 }
 
-// Playing a Laser Pointer only flips the top card face-up in place on the
-// deck (game.pendingLaserReveal) — it doesn't yet add it to a hand or decide
-// who may wake a cat. That happens in resolveLaserReveal, called after a
-// UI-driven delay so every player gets a beat to actually see the card that
-// came up before its effect is applied. validateTurn blocks any other action
-// while a reveal is pending, same as pendingAction/pendingWakeChoice.
+// Playing a Laser Pointer picks one random awake, unguarded cat from *any*
+// player's collection (including the actor's own) and one random
+// destination player *other than* its current owner — it always moves
+// somewhere new, never stays put (the one exception is the Ginger Tom
+// conflict below, a deliberate rule, not randomness reasserting itself) —
+// but only marks the choice (game.pendingLaserChaos), doesn't move the cat
+// yet, so every player gets a beat to see which cat got caught in the chaos
+// before it's reassigned. resolveLaserChaos (below), called after a
+// UI-driven delay, actually applies it. Both the cat and its destination
+// are decided right here, deterministically — the delay is purely
+// presentational, same pattern as the reveal-flip mechanic this replaced.
+// validateTurn blocks any other action while a pick is pending, same as
+// pendingAction/pendingWakeChoice.
 export function playLaserPointer(game, playerId, cardIndex) {
   if (!validateTurn(game, playerId)) {
     return game;
@@ -579,62 +602,77 @@ export function playLaserPointer(game, playerId, cardIndex) {
   game.sfxEvents = ["laser"];
   player.hand.splice(cardIndex, 1);
   game.discardPile.push(card);
+  // Unlike the old reveal mechanic, nothing here ever lands in the actor's
+  // hand — the effect is entirely about cats moving between collections —
+  // so the replacement draw happens immediately, same as every other card
+  // type, rather than being deferred to the resolve step.
+  drawCard(game, player);
 
-  if (game.deck.length === 0) {
-    reshuffleDiscardIntoDeck(game);
+  const candidates = [];
+  for (const p of game.players) {
+    for (const cat of p.cats) {
+      if (!cat.guarded) candidates.push({ cat, ownerId: p.id });
+    }
   }
 
-  const revealedCard = game.deck.shift() ?? null;
+  if (candidates.length === 0) {
+    finishTurn(game, { playerId, kind: "laserChaosNoCats" });
+    return game;
+  }
 
-  game.pendingLaserReveal = { playerId, revealedCard };
-  game.lastMessage = { playerId, kind: "laserRevealing" };
+  const { cat, ownerId } = candidates[Math.floor(Math.random() * candidates.length)];
+  // Excludes the current owner outright (not a reroll-until-different) —
+  // there's always at least one other player, since every game has at
+  // least 2 — so the chaos always actually goes somewhere.
+  const otherPlayerIds = game.players.map(p => p.id).filter(id => id !== ownerId);
+  const destinationPlayerId = otherPlayerIds[Math.floor(Math.random() * otherPlayerIds.length)];
 
-  return game; // wait for resolveLaserReveal — turn does not advance yet
+  game.pendingLaserChaos = { playerId, catId: cat.id, catName: cat.name, ownerId, destinationPlayerId };
+  game.lastMessage = { playerId, kind: "laserChaosPicked", catName: cat.name, ownerId };
+
+  return game; // wait for resolveLaserChaos — turn does not advance yet
 }
 
-// Applies the effect of a card already revealed by playLaserPointer: a
-// Number card starts a count-around-the-table wake choice, anything else
-// goes straight into the revealing player's hand as their replacement draw.
-export function resolveLaserReveal(game) {
-  const pending = game.pendingLaserReveal;
+// Applies the cat reassignment already decided by playLaserPointer: moves
+// the chosen cat from its owner's collection to the destination player's,
+// reusing giveCatToPlayer so the usual Ginger Tom conflict handling — cat
+// bounces back to sleep instead — applies here exactly as it does for a Dog
+// wake or Fish steal. That conflict case is the only way this ever resolves
+// without the cat actually reaching a new player, since playLaserPointer
+// never picks the current owner as the destination in the first place.
+export function resolveLaserChaos(game) {
+  const pending = game.pendingLaserChaos;
   if (!pending) {
     return game;
   }
 
-  const { playerId, revealedCard } = pending;
-  const player = game.players[playerId];
+  const { playerId, catId, catName, ownerId, destinationPlayerId } = pending;
 
   game.sfxEvents = [];
-  game.pendingLaserReveal = null;
+  game.pendingLaserChaos = null;
 
-  if (revealedCard === null) {
-    // Nothing left to reveal — just draw back up if possible.
-    drawCard(game, player);
-    finishTurn(game, { playerId, kind: "laserNoCards" });
-    return game;
-  } else if (revealedCard.type === "number") {
-    game.discardPile.push(revealedCard);
+  const ownerPlayer = game.players[ownerId];
+  const catIndex = ownerPlayer.cats.findIndex(c => c.id === catId);
 
-    const numPlayers = game.players.length;
-    const targetIndex = (playerId + revealedCard.value - 1) % numPlayers;
-
-    drawCard(game, player);
-
-    if (getAvailableSlots(game).length > 0) {
-      game.pendingWakeChoice = { playerId: targetIndex, bonus: false, actorId: playerId };
-      game.lastMessage = { playerId, kind: "laserWakeChoice", targetId: targetIndex };
-      console.log(`Player ${targetIndex} may wake a sleeping cat!`);
-      return game; // wait for respondToWakeChoice — turn does not advance yet
-    }
-
-    finishTurn(game, { playerId, kind: "laserNoSlots" });
+  if (catIndex === -1) {
+    // Shouldn't happen — validateTurn blocks every other action while this
+    // is pending, so the cat can't have moved between play and resolve —
+    // but fall back gracefully rather than assume.
+    finishTurn(game, { playerId, kind: "laserChaosNoCats" });
     return game;
   }
 
-  // Kings/Knights/Seagulls/Catnip/Snails go straight into the player's hand
-  // as their replacement draw.
-  player.hand.push(revealedCard);
-  finishTurn(game, { playerId, kind: "laserReveal", cardType: revealedCard.type });
+  const [cat] = ownerPlayer.cats.splice(catIndex, 1);
+  const destinationPlayer = game.players[destinationPlayerId];
+  const joined = giveCatToPlayer(game, destinationPlayer, cat);
+
+  if (joined) {
+    game.sfxEvents.push("wakeCat");
+    finishTurn(game, { playerId, kind: "laserChaosMoved", catName, ownerId, destinationPlayerId });
+  } else {
+    game.sfxEvents.push("gingerTomBackToSleep");
+    finishTurn(game, { playerId, kind: "laserChaosConflict", catName, ownerId, destinationPlayerId });
+  }
 
   return game;
 }
@@ -710,12 +748,15 @@ export function createGame(numPlayers, startingPlayerIndex = null) {
   };
 }
 
-// Official Sleeping Queens lowers the win bar for bigger tables: 4 cats /
-// 40 points for 4-5 players, vs 5 cats / 50 points for 2-3 players.
+// Win bar is lower for bigger tables: 4 cats / 45 points for 4-5 players,
+// vs 5 cats / 55 points for 2-3 players. Point thresholds scaled up from the
+// original 40/50 to roughly track the cat roster's own point total after it
+// grew from 135 to 152 (see createCats) — not an exact proportional match,
+// rounded to clean numbers.
 export function getWinThresholds(numPlayers) {
   return numPlayers >= 4
-    ? { cats: 4, points: 40 }
-    : { cats: 5, points: 50 };
+    ? { cats: 4, points: 45 }
+    : { cats: 5, points: 55 };
 }
 
 export function checkWinner(game) {
@@ -858,13 +899,12 @@ export function discardMathSet(game, playerId, cardIndices) {
   }
 
   // A matching triplet grants a wake choice, same generic pendingWakeChoice
-  // mechanism the Sphynx/Hot Dog bonus wake and Laser Pointer's count-around
-  // landing already use — every caller of that mechanism (AI response, local
-  // hotseat's turn-effect, server/rooms.js's scheduleNextStep, the sleeping
-  // grid's own selectable/pulsing-prompt UI) is already generic over *why*
-  // it's pending, so this needs no changes anywhere else. If every cat's
-  // already awake there's nothing to grant, so just finish the turn normally
-  // instead — mirrors resolveLaserReveal's own getAvailableSlots check.
+  // mechanism the Sphynx/Hot Dog bonus wake already use — every caller of
+  // that mechanism (AI response, local hotseat's turn-effect, server/
+  // rooms.js's scheduleNextStep, the sleeping grid's own selectable/pulsing-
+  // prompt UI) is already generic over *why* it's pending, so this needs no
+  // changes anywhere else. If every cat's already awake there's nothing to
+  // grant, so just finish the turn normally instead.
   if (isTriplet && getAvailableSlots(game).length > 0) {
     game.pendingWakeChoice = { playerId, bonus: false, actorId: playerId };
     game.lastMessage = { playerId, kind: "discardedTriplet", count: cards.length };

@@ -138,8 +138,14 @@ export function chooseAiTurn(game, playerId) {
     };
   }
 
+  // Reuses the same opponentsWithCats check Fish/Catnip use above — if no
+  // opponent has an unguarded cat, the only candidates the chaos could pick
+  // from are the AI's own, and since the destination is always someone
+  // *other* than the current owner (see playLaserPointer), that would
+  // guarantee giving one of its own cats away for nothing. Skip it and fall
+  // through to discarding instead.
   const laserIndex = player.hand.findIndex(c => c.type === "laser");
-  if (laserIndex !== -1) {
+  if (laserIndex !== -1 && opponentsWithCats.length > 0) {
     return { type: "laser", cardIndex: laserIndex };
   }
 
