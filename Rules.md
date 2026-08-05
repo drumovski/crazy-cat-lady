@@ -31,30 +31,30 @@ ensure you always have 5.
 
 **There are 12 cat cards**
 
-1.  Maine Coon -- 20 cat points
+1.  Maine Coon -- 22 cat points
 
-2.  Calico -- 16 cat points
+2.  Calico -- 17 cat points
 
-3.  Ginger Tom -- 15 cat points (you can only have one Ginger Tom, they
+3.  Ginger Tom -- 16 cat points (you can only have one Ginger Tom, they
     hate each other!)
 
-4.  2nd Ginger Tom -- 15 cat points
+4.  2nd Ginger Tom -- 16 cat points
 
-5.  Persian -- 14 cat points
+5.  Persian -- 15 cat points
 
-6.  Toyger -- 13 cat points
+6.  Toyger -- 14 cat points
 
-7.  Bombay -- 12 cat points
+7.  Bombay -- 13 cat points
 
-8.  Ragdoll -- 11 cat points
+8.  Ragdoll -- 12 cat points
 
-9.  Russian Blue -- 10 cat points
+9.  Russian Blue -- 11 cat points
 
-10. Bengal -- 9 cat points
+10. Bengal -- 10 cat points
 
-11. Siamese -- 8 cat points
+11. Siamese -- 9 cat points
 
-12. Sphynx -- 6 cat points (if awakened, is cold and wakes another cat
+12. Sphynx -- 7 cat points (if awakened, is cold and wakes another cat
     to keep warm!)
 
 **67 draw cards**

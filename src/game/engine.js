@@ -106,18 +106,18 @@ const CAT_ID_OFFSET = 1000;
 
 export function createCats() {
   const roster = [
-    { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 1 },
-    { name: "Ginger Tom", points: 15, pairKey: "gingerTom", variant: 2 },
-    { name: "Maine Coon", points: 20 },
-    { name: "Calico", points: 16 },
-    { name: "Persian", points: 14 },
-    { name: "Toyger", points: 13 },
-    { name: "Ragdoll", points: 11 },
-    { name: "Bombay", points: 12 },
-    { name: "Russian Blue", points: 10 },
-    { name: "Sphynx", points: 6, wakesBonus: true },
-    { name: "Siamese", points: 8 },
-    { name: "Bengal", points: 9 }
+    { name: "Ginger Tom", points: 16, pairKey: "gingerTom", variant: 1 },
+    { name: "Ginger Tom", points: 16, pairKey: "gingerTom", variant: 2 },
+    { name: "Maine Coon", points: 22 },
+    { name: "Calico", points: 17 },
+    { name: "Persian", points: 15 },
+    { name: "Toyger", points: 14 },
+    { name: "Ragdoll", points: 12 },
+    { name: "Bombay", points: 13 },
+    { name: "Russian Blue", points: 11 },
+    { name: "Sphynx", points: 7, wakesBonus: true },
+    { name: "Siamese", points: 9 },
+    { name: "Bengal", points: 10 }
   ];
 
   return roster.map((cat, i) => ({ type: "cat", id: CAT_ID_OFFSET + i, ...cat }));
@@ -557,16 +557,29 @@ export function finishTurn(game, lastMessage = null) {
   game.pendingWakeChoice = null;
   game.lastMessage = lastMessage;
 
-  const winnerId = checkWinner(game);
-  if (winnerId !== null) {
-    game.winner = winnerId;
+  const result = checkWinner(game);
+  if (result !== null) {
+    // game.winner stays a single id even on a tie (the lowest-id tied
+    // player) — every existing `game.winner !== undefined` check elsewhere
+    // (App.jsx, GameBoard.jsx, server/index.js, server/rooms.js) only cares
+    // whether the game is over, not who specifically won, so none of those
+    // needed to change. game.tiedWith is the new, additive bit of state:
+    // null for an ordinary win, or every tied player's id (including
+    // game.winner's own) when checkWinner's points-leader fallback found a
+    // genuine tie — see its own comment for why only that path can tie.
+    game.winner = result.winnerId;
+    game.tiedWith = result.tiedPlayerIds;
     // Every finishTurn caller has already reset/populated sfxEvents for its
     // own action (per the "reset after validation, not unconditionally"
     // pattern — see playDog) before reaching here, so this just appends to
     // whatever's already queued for this action, same as drawCard/
     // reshuffleDiscardIntoDeck do.
     game.sfxEvents?.push("win");
-    console.log(`Player ${winnerId} wins!`);
+    console.log(
+      result.tiedPlayerIds
+        ? `Players ${result.tiedPlayerIds.join(", ")} tied!`
+        : `Player ${result.winnerId} wins!`
+    );
     return;
   }
 
@@ -749,42 +762,66 @@ export function createGame(numPlayers, startingPlayerIndex = null) {
 }
 
 // Win bar is lower for bigger tables: 4 cats / 45 points for 4-5 players,
-// vs 5 cats / 55 points for 2-3 players. Point thresholds scaled up from the
-// original 40/50 to roughly track the cat roster's own point total after it
-// grew from 135 to 152 (see createCats) — not an exact proportional match,
-// rounded to clean numbers.
+// vs 5 cats / 55 points for 2-3 players. Point thresholds originally scaled
+// up from Sleeping Queens' own 40/50 to roughly track the cat roster's point
+// total (135 in the original game). The roster has since grown to 162 (see
+// createCats) without these thresholds moving in lockstep every time —
+// deliberate as of the most recent roster bump: 45/162 and 55/162 land a
+// bit lower, proportionally, than Sleeping Queens' own ~30%/~37% split, but
+// that's an accepted tradeoff for this round rather than a rounding
+// oversight, so don't "fix" it back into alignment without asking first.
 export function getWinThresholds(numPlayers) {
   return numPlayers >= 4
     ? { cats: 4, points: 45 }
     : { cats: 5, points: 55 };
 }
 
+// Returns null while the game is still in progress. Otherwise an object:
+// `winnerId` is always a single player id (the lowest-id tied player, if
+// there's a tie — see below); `tiedPlayerIds` is null for an ordinary win
+// and every tied player's id (including winnerId's own) when the game
+// actually ended in a genuine tie.
+//
+// A tie can only happen via the points-leader fallback below — a threshold
+// win (someone actually reaches the cat/point bar) is structurally always
+// single-player, since checkWinner runs after *every* action (via
+// finishTurn) and a threshold can only ever be freshly crossed by whichever
+// player's action just ran; there's no way for two players to simultaneously
+// cross it on the same check.
 export function checkWinner(game) {
   const thresholds = getWinThresholds(game.players.length);
 
   for (const player of game.players) {
     if (player.cats.length >= thresholds.cats || getPlayerPoints(player) >= thresholds.points) {
-      return player.id;
+      return { winnerId: player.id, tiedPlayerIds: null };
     }
   }
 
   // With 3+ players, all 12 cats can end up distributed without anyone
   // crossing the threshold (e.g. three players with 4 cats/~45 points
   // each). Once there's nothing left to wake or fight over, break the tie
-  // by points (then by cat count, then by lowest player id).
+  // by points, then by cat count — and if that's *still* tied, it's a
+  // genuine tie between everyone left standing, not just a coin flip.
   if (game.sleepingCats.every(slot => slot === null)) {
-    return getPointsLeader(game).id;
+    const tiedPlayerIds = getTiedPointsLeaders(game);
+    return {
+      winnerId: tiedPlayerIds[0],
+      tiedPlayerIds: tiedPlayerIds.length > 1 ? tiedPlayerIds : null
+    };
   }
 
   return null; // no winner yet
 }
 
-export function getPointsLeader(game) {
-  return game.players.reduce((leader, player) => {
-    if (getPlayerPoints(player) > getPlayerPoints(leader)) return player;
-    if (getPlayerPoints(player) === getPlayerPoints(leader) && player.cats.length > leader.cats.length) return player;
-    return leader;
-  });
+// Every player sharing the best points total (then best cat count among
+// those, as the first tiebreak) — length 1 for an outright leader, 2+ for a
+// genuine tie. Order matches game.players, so index 0 is always the
+// lowest-id tied player.
+function getTiedPointsLeaders(game) {
+  const bestPoints = Math.max(...game.players.map(getPlayerPoints));
+  const withBestPoints = game.players.filter(player => getPlayerPoints(player) === bestPoints);
+  const bestCats = Math.max(...withBestPoints.map(player => player.cats.length));
+  return withBestPoints.filter(player => player.cats.length === bestCats).map(player => player.id);
 }
 
 export function discardCard(game, playerId, cardIndex) {

@@ -14,7 +14,8 @@ import {
   isValidMathDiscard,
   playLaserPointer,
   resolveLaserChaos,
-  checkWinner
+  checkWinner,
+  finishTurn
 } from "./engine.js";
 
 // Test-only helper: wakes and hands a specific player any one sleeping cat,
@@ -416,8 +417,9 @@ function testPointsWinCondition() {
     { type: "cat", id: 102, name: "Ginger Tom", points: 16 }
   ];
 
-  const winnerId = checkWinner(game);
-  console.log("Player wins on points with only 3 cats:", winnerId === 0);
+  const result = checkWinner(game);
+  console.log("Player wins on points with only 3 cats:", result.winnerId === 0);
+  console.log("Not a tie:", result.tiedPlayerIds === null);
 }
 
 testPointsWinCondition();
@@ -498,7 +500,7 @@ function testWinThresholdScalesWithFourPlayers() {
     { type: "cat", id: 203, name: "Ragdoll", points: 10 }
   ];
 
-  console.log("4-player game wins at 4 cats (should be 0):", checkWinner(game) === 0);
+  console.log("4-player game wins at 4 cats (should be 0):", checkWinner(game).winnerId === 0);
 }
 
 testWinThresholdScalesWithFourPlayers();
@@ -518,7 +520,7 @@ function testPointsThresholdScalesWithFourPlayers() {
     { type: "cat", id: 212, name: "Bombay", points: 12 }
   ];
 
-  console.log("4-player game wins at 45+ points with only 3 cats:", checkWinner(game) === 0);
+  console.log("4-player game wins at 45+ points with only 3 cats:", checkWinner(game).winnerId === 0);
 }
 
 testPointsThresholdScalesWithFourPlayers();
@@ -569,10 +571,69 @@ function testAllCatsAwakeWithNoWinnerBreaksTieByPoints() {
     { type: "cat", id: 311, points: 5 }
   ];
 
-  console.log("All cats awake, no threshold met, tiebreak picks the points leader (should be 1):", checkWinner(game) === 1);
+  const result = checkWinner(game);
+  console.log("All cats awake, no threshold met, tiebreak picks the points leader (should be 1):", result.winnerId === 1);
+  console.log("Not a genuine tie — player 1 has strictly more points:", result.tiedPlayerIds === null);
 }
 
 testAllCatsAwakeWithNoWinnerBreaksTieByPoints();
+
+function testAllCatsAwakeWithGenuineTieReportsAllTiedPlayers() {
+  const game = createGame(3, 0);
+
+  // All 12 cats distributed, everyone landing on exactly 15 points and 3
+  // cats each — nobody crosses the threshold, and nobody edges anyone else
+  // out on points or cat count either, so this is a genuine 3-way tie, not
+  // just "whoever's currently ahead when the cats run out."
+  game.sleepingCats = game.sleepingCats.map(() => null);
+  game.players[0].cats = [
+    { type: "cat", id: 300, points: 5 },
+    { type: "cat", id: 301, points: 5 },
+    { type: "cat", id: 302, points: 5 }
+  ];
+  game.players[1].cats = [
+    { type: "cat", id: 303, points: 5 },
+    { type: "cat", id: 304, points: 5 },
+    { type: "cat", id: 305, points: 5 }
+  ];
+  game.players[2].cats = [
+    { type: "cat", id: 306, points: 5 },
+    { type: "cat", id: 307, points: 5 },
+    { type: "cat", id: 308, points: 5 }
+  ];
+
+  const result = checkWinner(game);
+  console.log("Genuine 3-way tie — winnerId is still the lowest tied id:", result.winnerId === 0);
+  console.log("Genuine 3-way tie — tiedPlayerIds lists everyone tied:", JSON.stringify(result.tiedPlayerIds) === JSON.stringify([0, 1, 2]));
+}
+
+testAllCatsAwakeWithGenuineTieReportsAllTiedPlayers();
+
+function testFinishTurnSetsGameTiedWithOnATie() {
+  const game = createGame(2, 0);
+  game.sleepingCats = game.sleepingCats.map(() => null);
+  game.players[0].cats = [{ type: "cat", id: 320, points: 10 }];
+  game.players[1].cats = [{ type: "cat", id: 321, points: 10 }];
+
+  finishTurn(game);
+
+  console.log("finishTurn sets game.winner to the lowest tied id:", game.winner === 0);
+  console.log("finishTurn sets game.tiedWith to every tied player:", JSON.stringify(game.tiedWith) === JSON.stringify([0, 1]));
+}
+
+testFinishTurnSetsGameTiedWithOnATie();
+
+function testFinishTurnLeavesGameTiedWithNullOnAnOrdinaryWin() {
+  const game = createGame(2, 0);
+  game.players[0].cats = [{ type: "cat", id: 330, points: 55 }];
+
+  finishTurn(game);
+
+  console.log("finishTurn sets game.winner on an ordinary win:", game.winner === 0);
+  console.log("finishTurn leaves game.tiedWith null on an ordinary (non-tied) win:", game.tiedWith === null);
+}
+
+testFinishTurnLeavesGameTiedWithNullOnAnOrdinaryWin();
 
 function testFishStealsChosenCat() {
   const game = createGame(2, 0);

@@ -10,6 +10,13 @@ import { motion } from "framer-motion";
 export const WIN_SCREEN_DELAY_MS = 3000;
 const WIN_SCREEN_FADE_DURATION_S = 1;
 
+// "X and Y" for two, "X, Y, and Z" for three or more — Oxford comma to
+// match the rest of this app's prose style (Rules.md, in-game messages).
+function joinNames(names) {
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
 export default function WinScreen({ game, playerNames = [], onNewGame, onPlayAgain, playAgainPending }) {
   const getName = id => playerNames[id] || `Player ${id + 1}`;
   const ranked = [...game.players].sort((a, b) => {
@@ -17,6 +24,16 @@ export default function WinScreen({ game, playerNames = [], onNewGame, onPlayAga
     const pointsB = b.cats.reduce((sum, cat) => sum + cat.points, 0);
     return pointsB - pointsA;
   });
+
+  // game.tiedWith is set by finishTurn (see engine.js's checkWinner) only
+  // for a genuine tie — same points *and* same cat count, reachable only via
+  // the all-cats-awake points-leader fallback (a threshold win is always
+  // single-player). game.winner is still always one specific id even then
+  // (the lowest tied id) so every OTHER `game.winner` consumer elsewhere in
+  // the app didn't need to change — winningPlayerIds is this component's own
+  // "who actually gets the winner treatment" list, tie or not.
+  const winningPlayerIds = game.tiedWith ?? [game.winner];
+  const isTie = winningPlayerIds.length > 1;
 
   // Deliberately no backdrop-click-to-dismiss here (unlike RulesModal) — the
   // game has genuinely ended and "New Game" is the only real next step,
@@ -35,7 +52,11 @@ export default function WinScreen({ game, playerNames = [], onNewGame, onPlayAga
       transition={{ duration: WIN_SCREEN_FADE_DURATION_S }}
     >
       <div className="win-screen">
-        <h1>{getName(game.winner)} wins!</h1>
+        <h1>
+          {isTie
+            ? `It's a tie between ${joinNames(winningPlayerIds.map(getName))}!`
+            : `${getName(game.winner)} wins!`}
+        </h1>
         <table className="win-table">
           <thead>
             <tr>
@@ -46,7 +67,7 @@ export default function WinScreen({ game, playerNames = [], onNewGame, onPlayAga
           </thead>
           <tbody>
             {ranked.map(player => (
-              <tr key={player.id} className={player.id === game.winner ? "win-row-winner" : ""}>
+              <tr key={player.id} className={winningPlayerIds.includes(player.id) ? "win-row-winner" : ""}>
                 <td>{getName(player.id)}</td>
                 <td>{player.cats.length}</td>
                 <td>{player.cats.reduce((sum, cat) => sum + cat.points, 0)}</td>
