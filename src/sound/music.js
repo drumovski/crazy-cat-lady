@@ -58,17 +58,30 @@ export function startMusic() {
 
 // Browsers block audio-with-sound until the user has interacted with the
 // page at all, so the module-load attempt above will typically fail
-// silently — this retries on the first real user gesture anywhere, which
-// browsers do allow to start playback. Removed after the first attempt
-// regardless of outcome, since a gesture-triggered play() call reliably
-// succeeds barring genuinely unusual environments not worth guarding for.
+// silently — this retries on every real user gesture anywhere until it
+// actually succeeds (startMusic() itself is a no-op once `playing` is true,
+// so calling it repeatedly here costs nothing once music has started).
+//
+// Listens for "click"/"touchend"/"keydown", NOT "pointerdown" — per the
+// HTML spec, only release-style events (click, pointerup, touchend, mouseup)
+// and keydown count as "activation triggering" user gestures; pointerdown
+// (a press, not a release) doesn't. Desktop Chrome is lenient enough to
+// unlock audio on pointerdown anyway, but stricter mobile browsers (notably
+// iOS Safari) don't, silently rejecting a play() call made from a
+// pointerdown handler — this was the actual root cause of "sound effects
+// work on mobile, music doesn't" (sfx are always triggered from real
+// onClick handlers, i.e. genuine click events, so they never hit this gap).
+//
+// Deliberately never removes these listeners (unlike an earlier single-shot
+// version) — a slow mobile connection can also make an early attempt fail
+// for an unrelated reason (the file hasn't loaded yet), so later gestures
+// need to keep getting a chance too, not just the first one.
 function resumeOnInteraction() {
   startMusic();
-  window.removeEventListener("pointerdown", resumeOnInteraction);
-  window.removeEventListener("keydown", resumeOnInteraction);
 }
 
 if (typeof window !== "undefined") {
-  window.addEventListener("pointerdown", resumeOnInteraction);
+  window.addEventListener("click", resumeOnInteraction);
+  window.addEventListener("touchend", resumeOnInteraction);
   window.addEventListener("keydown", resumeOnInteraction);
 }
