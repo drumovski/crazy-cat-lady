@@ -8,16 +8,20 @@ import { isRateLimited } from "./rateLimit.js";
 // gameAction is keyed by socket.id instead: it's about capping how fast one
 // already-seated connection can flood actions, not about spam room creation,
 // and legitimate players sharing a household IP shouldn't throttle each
-// other's actual gameplay. Limits are deliberately generous for real use —
-// e.g. "Play Again" (see CLAUDE.md) calls createRoom again for every game a
-// group plays in a row, so a long session shouldn't come close to its cap —
-// while still capping a scripted flood loop hard. Known caveat: if the
-// eventual SiteGround deploy sits behind a reverse proxy that doesn't pass
-// the real client IP through, handshake.address could report the proxy's
-// own address for every connection, collapsing the createRoom/joinRoom
-// limits onto one shared bucket — worth checking once actually deployed.
-const CREATE_ROOM_LIMIT = { max: 20, windowMs: 10 * 60 * 1000 };
-const JOIN_ROOM_LIMIT = { max: 30, windowMs: 10 * 60 * 1000 };
+// other's actual gameplay.
+//
+// Bumped up from an original 20/30 after real-world use hit the cap: this
+// game's actual common case is several people on one shared WiFi (one IP)
+// each creating/joining/rejoining their own way, not one request per group —
+// the original numbers assumed the latter. Confirmed in production, not
+// just theorized: the "SiteGround reverse proxy could collapse everyone
+// onto one shared bucket" caveat this comment used to carry turned out
+// moot (the actual deploy uses Render for the backend, not SiteGround —
+// see CLAUDE.md's Deployment section), but a shared-WiFi household hits the
+// exact same symptom regardless of hosting, since they always really do
+// share one real IP. Still high enough to cap an obvious scripted flood.
+const CREATE_ROOM_LIMIT = { max: 40, windowMs: 10 * 60 * 1000 };
+const JOIN_ROOM_LIMIT = { max: 60, windowMs: 10 * 60 * 1000 };
 const GAME_ACTION_LIMIT = { max: 15, windowMs: 5 * 1000 };
 
 const PORT = process.env.PORT || 3001;
