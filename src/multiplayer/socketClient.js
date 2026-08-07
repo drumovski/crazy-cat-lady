@@ -39,3 +39,14 @@ export function onRoomState(handler) {
   getSocket().on("roomState", handler);
   return () => getSocket().off("roomState", handler);
 }
+
+// Fires only on a successful *automatic* reconnection (socket.io's Manager
+// event), never on the initial connect — distinct from onRoomState above.
+// A reconnection always gets a fresh socket.id, so the server's seat binding
+// for the old one (cleared by its own disconnect handling once the dead
+// connection's ping times out) is gone; the caller needs this to know when
+// to re-run joinRoom and claim the seat back under the new id.
+export function onReconnect(handler) {
+  getSocket().io.on("reconnect", handler);
+  return () => getSocket().io.off("reconnect", handler);
+}

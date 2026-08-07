@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createGame,
   playDog,
@@ -16,7 +16,7 @@ import {
 import { takeAiTurn } from "./game/ai.js";
 import { DEFAULT_BLOCK_TIMER_SECONDS } from "./game/blockTimer.js";
 import { AI_THINK_DELAY_MS, LASER_CHAOS_DELAY_MS } from "./game/timings.js";
-import { onRoomState, sendGameAction, createRoom as createRoomClient, joinRoom as joinRoomClient } from "./multiplayer/socketClient.js";
+import { onRoomState, onReconnect, sendGameAction, createRoom as createRoomClient, joinRoom as joinRoomClient } from "./multiplayer/socketClient.js";
 import ModeSelect from "./components/ModeSelect.jsx";
 import SetupScreen from "./components/SetupScreen.jsx";
 import OnlineSetup from "./components/OnlineSetup.jsx";
@@ -148,6 +148,56 @@ export default function App() {
       if (state.roomName === onlineSession.roomName) {
         setRoomState(state);
       }
+    });
+  }, [onlineSession]);
+
+  // Read inside the reconnect handler below via a ref rather than as an
+  // effect dependency — onlineSession/roomName don't change mid-session, but
+  // roomState updates constantly via the subscription above, and
+  // re-subscribing to onReconnect on every single broadcast would be wasteful
+  // (and pointless, since socket.io's Manager-level "reconnect" event doesn't
+  // care how many times a handler gets re-registered).
+  const roomStateRef = useRef(roomState);
+  useEffect(() => {
+    roomStateRef.current = roomState;
+  }, [roomState]);
+
+  // A mobile tab backgrounded for more than socket.io's ping-timeout window
+  // (~45s by default) gets silently disconnected server-side — which clears
+  // that seat's socket binding, same cleanup the abandoned-room sweep relies
+  // on (see CLAUDE.md). socket.io's client then auto-reconnects once the tab
+  // wakes back up, but under a brand-new socket.id that was never bound to
+  // any seat, so every action after that was silently dropped server-side
+  // (the same "invalid seat" guard that silently drops a rate-limited
+  // action) — the player could still select cards, but nothing they did
+  // actually reached the game, and selections just reverted.
+  //
+  // This is a different gap than the existing "rejoin by name" fix (see
+  // CLAUDE.md's "Online multiplayer" section): that one only helps a player
+  // who reloads the page and manually retypes their name into "Join Room".
+  // Here the tab never reloads at all — GameBoard stays mounted with stale
+  // state the whole time — so the fix has to happen automatically, by
+  // re-running the exact same rejoin-by-name flow the moment the socket
+  // reconnects, without waiting for the player to notice anything's wrong.
+  useEffect(() => {
+    if (!onlineSession) {
+      return undefined;
+    }
+    return onReconnect(async () => {
+      const currentRoomState = roomStateRef.current;
+      if (!currentRoomState) return;
+
+      const myName = currentRoomState.playerNames[onlineSession.playerId];
+      const result = await joinRoomClient(onlineSession.roomName, myName);
+
+      if (result.error) {
+        // Genuinely can't reclaim the seat (room gone, name no longer
+        // matches, etc.) — don't leave the player stranded on a frozen
+        // board with no path forward.
+        backToMenu();
+        return;
+      }
+      setRoomState(result);
     });
   }, [onlineSession]);
 
