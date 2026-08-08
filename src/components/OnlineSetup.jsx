@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createRoom, joinRoom, onRoomState } from "../multiplayer/socketClient.js";
+import { createRoom, joinRoom, leaveRoom, onRoomState } from "../multiplayer/socketClient.js";
 import { BLOCK_TIMER_MIN, BLOCK_TIMER_MAX, DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import MenuFrame from "./MenuFrame.jsx";
 
@@ -104,13 +104,26 @@ export default function OnlineSetup({
     handleJoined(result);
   }
 
+  // Bug, fixed: this used to just call onBack directly, a client-side-only
+  // navigation with no server call — the socket stayed connected (the tab
+  // never closed), so the server never saw a disconnect, and a room the
+  // creator abandoned here before anyone else joined sat orphaned forever,
+  // permanently blocking that room name from ever being reused (see
+  // rooms.js's leaveRoom). Telling the server explicitly lets it free the
+  // seat — and, if that was the room's last connected human, delete the
+  // whole room immediately rather than leaving it for the 30-minute sweep.
+  function handleCancel() {
+    leaveRoom(room.roomName);
+    onBack();
+  }
+
   if (room) {
     return (
       <MenuFrame>
         <p>Waiting for other players to join…</p>
         <div className="room-name-display">{room.roomName}</div>
         <p className="setup-hint">Share this room name with the other players.</p>
-        <button type="button" className="secondary-button" onClick={onBack}>
+        <button type="button" className="secondary-button" onClick={handleCancel}>
           Cancel
         </button>
       </MenuFrame>

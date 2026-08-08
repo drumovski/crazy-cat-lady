@@ -260,6 +260,53 @@ export function removeSocket(socketId) {
   }
 }
 
+// Explicit, intentional exit from a room — distinct from removeSocket (an
+// actual disconnect/network drop, which keeps the reconnect grace period
+// below). Only ever sent by OnlineSetup.jsx's "Cancel" button on the
+// pre-game "waiting" screen (App.jsx never renders that screen once
+// room.status is "playing"), but handled safely for either status regardless
+// of what the client sends.
+//
+// Bug, fixed: clicking "Cancel" used to just navigate the UI back home
+// client-side, with no server call at all — the socket stayed connected (the
+// tab never closed), so removeSocket never ran, room.emptySince never got
+// set, and a "waiting" room the creator abandoned before anyone else joined
+// sat in `rooms` forever: not just outliving the 30-minute abandoned-room
+// sweep, but never becoming eligible for it in the first place, permanently
+// blocking that room name from ever being reused.
+//
+// A *waiting* room that loses its last connected human this way is deleted
+// immediately rather than left for the sweep — unlike an accidental
+// disconnect, there's no reason to hold a reconnect grace period open for a
+// player who explicitly clicked away before the game even started, and a
+// still-"waiting" room can never usefully be come back to anyway (there's no
+// rejoin-by-name path for a room that hasn't started — see findRejoinSeat,
+// which only ever matches an existing human *seat*, and a waiting room with
+// zero connected humans has no seats occupied to match against). A room
+// that's still occupied by other humans just has this one seat freed, same
+// as removeSocket would. A "playing" room (shouldn't be reachable from the
+// real UI, but handled the same as an ordinary disconnect just in case) keeps
+// the normal grace-period behavior instead, preserving the rejoin-by-name
+// window for what might just be a genuinely dropped connection.
+export function leaveRoom(roomName, socketId) {
+  const room = rooms.get(typeof roomName === "string" ? roomName.trim().toLowerCase() : "");
+  if (!room) return;
+
+  const seatId = room.socketToSeat.get(socketId);
+  if (seatId === undefined) return;
+
+  room.socketToSeat.delete(socketId);
+  room.seatToSocket.delete(seatId);
+
+  if (!isRoomEmpty(room)) return;
+
+  if (room.status === "waiting") {
+    removeRoom(room.roomName);
+  } else if (room.emptySince === null) {
+    room.emptySince = Date.now();
+  }
+}
+
 // Periodic sweep for rooms nobody's coming back to — a "waiting" room that
 // never filled, or a "playing" room every human has disconnected from for
 // longer than ROOM_ABANDON_TIMEOUT_MS. Rooms that finish normally are freed

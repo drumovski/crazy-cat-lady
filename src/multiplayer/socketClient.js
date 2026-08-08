@@ -35,6 +35,13 @@ export function sendGameAction(roomName, type, args) {
   getSocket().emit("gameAction", { roomName, type, args });
 }
 
+// Fire-and-forget, like sendGameAction — the caller (OnlineSetup's "Cancel"
+// button) is navigating away regardless of whether this reaches the server,
+// so there's nothing worth waiting on an ack for.
+export function leaveRoom(roomName) {
+  getSocket().emit("leaveRoom", { roomName });
+}
+
 export function onRoomState(handler) {
   getSocket().on("roomState", handler);
   return () => getSocket().off("roomState", handler);

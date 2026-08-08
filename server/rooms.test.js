@@ -1,4 +1,4 @@
-import { createRoom, joinRoom, getRoom, removeSocket, removeAbandonedRooms } from "./rooms.js";
+import { createRoom, joinRoom, leaveRoom, getRoom, removeSocket, removeAbandonedRooms } from "./rooms.js";
 
 // Console.log-assertion style, matching src/game/engine.test.js/ai.test.js —
 // no framework, run directly with `node`. Exercises removeAbandonedRooms
@@ -85,3 +85,63 @@ function testFinishedGameRoomIsUnaffectedByEmptySinceLogic() {
 }
 
 testFinishedGameRoomIsUnaffectedByEmptySinceLogic();
+
+function testLeaveRoomDeletesASoloWaitingRoomImmediately() {
+  // The bug: creating a room then clicking Cancel before anyone else joined
+  // used to orphan it forever (no disconnect ever fired, so it never even
+  // became eligible for the abandoned-room sweep).
+  const roomName = "LeaveTest1";
+  createRoom({ numPlayers: 2, numAiOpponents: 0, socketId: "socketH", name: "Hank", roomName, blockTimerSeconds: 10 });
+  console.log("Room exists right after creation:", Boolean(getRoom(roomName)));
+
+  leaveRoom(roomName, "socketH");
+  console.log("Room is deleted immediately on leaveRoom, no sweep needed:", getRoom(roomName) === undefined);
+}
+
+testLeaveRoomDeletesASoloWaitingRoomImmediately();
+
+function testLeaveRoomJustFreesTheSeatWhenOthersAreStillWaiting() {
+  const roomName = "LeaveTest2";
+  createRoom({ numPlayers: 3, numAiOpponents: 0, socketId: "socketI", name: "Ivy", roomName, blockTimerSeconds: 10 });
+  joinRoom(roomName, "socketJ", "Jack"); // still "waiting" — needs a 3rd human
+
+  leaveRoom(roomName, "socketJ"); // Jack cancels, Ivy is still there
+  console.log("Room survives because Ivy is still connected:", Boolean(getRoom(roomName)));
+
+  const rejoined = joinRoom(roomName, "socketK", "Kate");
+  console.log("Jack's freed seat can be claimed by someone new:", rejoined.playerId === 1);
+}
+
+testLeaveRoomJustFreesTheSeatWhenOthersAreStillWaiting();
+
+function testLeaveRoomOnAPlayingRoomKeepsTheGracePeriodInstead() {
+  // Shouldn't be reachable from the real UI (the Cancel button only renders
+  // pre-game), but handled defensively the same as an ordinary disconnect —
+  // a "playing" room shouldn't lose its rejoin-by-name grace period just
+  // because this event fired instead of a real disconnect.
+  const roomName = "LeaveTest3";
+  createRoom({ numPlayers: 2, numAiOpponents: 0, socketId: "socketL", name: "Liam", roomName, blockTimerSeconds: 10 });
+  joinRoom(roomName, "socketM", "Mia"); // fills the room -> status becomes "playing"
+
+  leaveRoom(roomName, "socketL");
+  leaveRoom(roomName, "socketM"); // now empty, but mid-game
+  console.log("A now-empty 'playing' room isn't deleted immediately:", Boolean(getRoom(roomName)));
+
+  sweepAfter(31 * 60 * 1000, removeAbandonedRooms);
+  console.log("...but is still caught by the normal abandon sweep eventually:", getRoom(roomName) === undefined);
+}
+
+testLeaveRoomOnAPlayingRoomKeepsTheGracePeriodInstead();
+
+function testLeaveRoomIsASafeNoOpForAnUnknownRoomOrSeat() {
+  leaveRoom("NoSuchRoom", "socketN");
+  console.log("leaveRoom on a nonexistent room doesn't throw:", true);
+
+  const roomName = "LeaveTest4";
+  createRoom({ numPlayers: 2, numAiOpponents: 0, socketId: "socketO", name: "Owen", roomName, blockTimerSeconds: 10 });
+  leaveRoom(roomName, "socketNotInThisRoom");
+  console.log("leaveRoom with a socket that isn't seated in the room doesn't throw:", true);
+  console.log("...and doesn't affect the room's actual occupant:", Boolean(getRoom(roomName)));
+}
+
+testLeaveRoomIsASafeNoOpForAnUnknownRoomOrSeat();

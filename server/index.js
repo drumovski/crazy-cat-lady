@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { createRoom, joinRoom, getRoom, removeRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
+import { createRoom, joinRoom, leaveRoom, getRoom, removeRoom, removeSocket, handleAction, scheduleNextStep } from "./rooms.js";
 import { isRateLimited } from "./rateLimit.js";
 
 // createRoom/joinRoom are keyed by IP (handshake.address) rather than
@@ -193,6 +193,12 @@ io.on("connection", socket => {
     handleAction(room, playerId, type, args);
     broadcastRoom(room);
     scheduleNextStep(room, () => broadcastRoom(room));
+  });
+
+  // No callback — the client fires this on its way out (Cancel on the
+  // pre-game waiting screen) and doesn't wait around for a response.
+  socket.on("leaveRoom", ({ roomName }) => {
+    leaveRoom(roomName, socket.id);
   });
 
   socket.on("disconnect", () => {
