@@ -861,6 +861,18 @@ button {
   align-items: flex-end;
   justify-content: center;
   padding: clamp(10px, calc(6px + 1.111vw), 16px) 0 clamp(4px, calc(1.333px + 0.741vw), 8px);
+  /* Without this, an empty .hand-fan collapses to just its own padding
+     (~24px) — and since GameBoard.jsx's dealFromOffset measurement effect
+     runs exactly once, on the same pass that first unlocks hand-card
+     rendering (see hasMeasuredOnce), it measures this collapsed box, not
+     the fan's true populated height. The resulting wrong center offset is
+     close enough to one pile-height that dealt/drawn cards visibly fly in
+     from around the discard pile instead of the draw pile. Reserving the
+     real card height up front (same --card-h-hand source of truth used by
+     .player-cats/.your-cats-row/the message log for this exact class of
+     bug — see "Fixed containers with dynamic content" in CLAUDE.md) means
+     the one-time measurement is correct from the very first deal. */
+  min-height: var(--card-h-hand);
 }
 .hand-fan-slot {
   transition: margin 0.15s ease;
