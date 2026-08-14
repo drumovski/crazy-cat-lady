@@ -186,7 +186,19 @@ export default function GameBoard({
     return {
       initial: { opacity: 0, x, y, scale: 0.5 },
       animate: { opacity: 1, x: 0, y: 0, scale: 1 },
-      exit: { opacity: 0, x, y, scale: 0.5 }
+      // No x/y on exit (unlike initial) — a hand card leaving the fan
+      // *always* has a real destination shown by a separate element
+      // elsewhere (the discard pile's own Card, or whatever a played
+      // action's effect animates), never "nowhere." Reusing initial's
+      // fly-from-the-draw-pile offset for exit too meant a discarded card's
+      // *hand-side* exiting element played its own stray "fly toward the
+      // draw pile, fade without landing" animation at the same time the
+      // *discard-pile's* separate, correct element flew in and landed —
+      // same card face, two different DOM elements, read as one card
+      // flying twice. See the discard-pile exit fix above for the same
+      // fix applied there first; this is the same bug, just on the other
+      // (hand-fan) side of the same transition.
+      exit: { opacity: 0, scale: 0.5 }
     };
   }
 
