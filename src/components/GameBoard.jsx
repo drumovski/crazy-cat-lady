@@ -217,13 +217,61 @@ export default function GameBoard({
     const variants = {
       initial: { opacity: 0, x, y, scale: 0.6 },
       animate: { opacity: 1, x: 0, y: 0, scale: 1 },
-      exit: { opacity: 0, x, y, scale: 0.6 }
+      // Deliberately no x/y here (unlike initial) — a REPLACED discard-pile
+      // card (this one getting buried under a newer discard) should just
+      // fade out in place, not visibly travel back toward the panel/hand it
+      // arrived from. Reusing the entry's offset for exit too looked like
+      // the discard pile's own card was "flying away" the same way a card
+      // leaves the *draw* pile — confusingly similar to the very bug this
+      // whole shareLayout:false approach exists to avoid. See CLAUDE.md.
+      exit: { opacity: 0, scale: 0.6 }
     };
     // Cap growth: only the current top-of-pile card's entry can ever be
     // queried again (an older one's card.id will never recur as topDiscard),
     // so drop everything but this one before adding it.
     discardFromOpponentVariantsRef.current.clear();
     discardFromOpponentVariantsRef.current.set(cardId, variants);
+    return variants;
+  }
+
+  // A *local* discard (this client's own — local hotseat, or online as
+  // myPlayerId) has a real prior on-screen position (unlike an opponent's,
+  // above) — but sharing layoutId with it turned out to be unreliable
+  // anyway: the discarded card is simultaneously the *exiting* element of
+  // the hand fan's own AnimatePresence, which uses mode="popLayout"
+  // specifically so its siblings can re-fan smoothly without waiting on its
+  // exit (see the hand fan below) — and that immediate "pop out of layout
+  // flow" handling conflicts with the same element's cross-tree layoutId
+  // FLIP to the discard pile, corrupting its computed FLIP source. Visibly:
+  // the discarded card's fly-in briefly appeared to originate from around
+  // the draw pile instead of the hand, and — since the card that visually
+  // *is* the discard pile's own "box" had moved to that wrong location —
+  // the discard pile's real position showed neither a card nor the empty
+  // placeholder, just bare felt, until the card arrived a moment later.
+  // Same fix as the opponent case above: drop shareLayout entirely and fly
+  // from an explicitly measured position instead — the hand fan's own
+  // center, mirroring how the opponent case flies from their whole panel
+  // rather than tracking a specific card slot within it.
+  const discardFromHandVariantsRef = useRef(new Map());
+
+  function getDiscardFromHandVariants(cardId) {
+    if (discardFromHandVariantsRef.current.has(cardId)) {
+      return discardFromHandVariantsRef.current.get(cardId);
+    }
+    if (!handFanRef.current || !discardPileSlotRef.current) return null;
+    const handRect = handFanRef.current.getBoundingClientRect();
+    const slotRect = discardPileSlotRef.current.getBoundingClientRect();
+    const x = handRect.left + handRect.width / 2 - (slotRect.left + slotRect.width / 2);
+    const y = handRect.top + handRect.height / 2 - (slotRect.top + slotRect.height / 2);
+    const variants = {
+      initial: { opacity: 0, x, y, scale: 0.6 },
+      animate: { opacity: 1, x: 0, y: 0, scale: 1 },
+      // No x/y on exit — see the matching comment on the opponent variant
+      // above, same reasoning applies here.
+      exit: { opacity: 0, scale: 0.6 }
+    };
+    discardFromHandVariantsRef.current.clear();
+    discardFromHandVariantsRef.current.set(cardId, variants);
     return variants;
   }
 
@@ -696,11 +744,11 @@ export default function GameBoard({
                         card={topDiscard}
                         size="board"
                         onClick={canDiscardViaPile ? () => {} : undefined}
-                        shareLayout={!topDiscardFromOpponent}
+                        shareLayout={false}
                         variants={
                           topDiscardFromOpponent
                             ? getDiscardFromOpponentVariants(topDiscard.id, game.lastMessage.playerId) ?? undefined
-                            : undefined
+                            : getDiscardFromHandVariants(topDiscard.id) ?? undefined
                         }
                       />
                     ) : (
