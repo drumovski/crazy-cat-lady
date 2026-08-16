@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoom, joinRoom, leaveRoom, onRoomState } from "../multiplayer/socketClient.js";
 import { BLOCK_TIMER_MIN, BLOCK_TIMER_MAX, DEFAULT_BLOCK_TIMER_SECONDS } from "../game/blockTimer.js";
 import MenuFrame from "./MenuFrame.jsx";
@@ -54,6 +54,24 @@ export default function OnlineSetup({
   // second createRoom/joinRoom emit on the same socket that fired the moment
   // the connection came up, seating the same player twice under one name.
   const [isPending, setIsPending] = useState(false);
+  // Live "waiting for other players" info — the most recent non-"playing"
+  // roomState seen (numPlayers/aiPlayerIds/joinedSeats/playerNames), and a
+  // running log of "X joined" lines built by diffing joinedSeats between
+  // updates. seenJoinedSeatsRef is seeded from the create/join ack itself
+  // (handleJoined) so it already reflects "who was here when I arrived"
+  // before the subscription below ever fires — needed because broadcastRoom
+  // excludes the socket that just got this same state via its own ack (see
+  // its comment in server/index.js), so for whoever just created/joined, the
+  // very *first* roomState they ever receive via the subscription can
+  // already be a real, later join worth announcing, not just an echo of
+  // their own arrival. Starts null only for the initialRoom/"Play Again"
+  // path (App.jsx remounts this component already past the ack, with no
+  // roomState to seed from yet) — there, the first received update seeds
+  // the roster quietly instead, since whoever's already present at that
+  // point isn't a *new* join to announce.
+  const [waitingInfo, setWaitingInfo] = useState(null);
+  const [joinMessages, setJoinMessages] = useState([]);
+  const seenJoinedSeatsRef = useRef(null);
 
   useEffect(() => {
     if (!room) return undefined;
@@ -67,7 +85,24 @@ export default function OnlineSetup({
         // (it fires as part of this same event, before the parent's own
         // subscription effect has a chance to run).
         onReady({ roomName: room.roomName, playerId: room.playerId, initialState: state });
+        return;
       }
+
+      // Still waiting — update the live roster, and announce anyone new
+      // (excluding this viewer's own seat — no "You joined" about yourself).
+      if (seenJoinedSeatsRef.current !== null) {
+        const newlyJoined = state.joinedSeats.filter(
+          seatId => seatId !== room.playerId && !seenJoinedSeatsRef.current.includes(seatId)
+        );
+        if (newlyJoined.length > 0) {
+          setJoinMessages(prev => [
+            ...prev,
+            ...newlyJoined.map(seatId => `${state.playerNames[seatId]} joined`)
+          ]);
+        }
+      }
+      seenJoinedSeatsRef.current = state.joinedSeats;
+      setWaitingInfo(state);
     });
   }, [room, onReady]);
 
@@ -87,6 +122,12 @@ export default function OnlineSetup({
     if (result.status === "playing") {
       onReady({ roomName: result.roomName, playerId: result.playerId, initialState: result });
     } else {
+      // Seed the roster baseline from the ack's own state (see
+      // seenJoinedSeatsRef's comment above) before the subscription effect
+      // below ever fires, so a join that happens moments later is correctly
+      // recognized as new rather than mistaken for the initial snapshot.
+      seenJoinedSeatsRef.current = result.joinedSeats;
+      setWaitingInfo(result);
       setRoom({ roomName: result.roomName, playerId: result.playerId });
     }
   }
@@ -131,11 +172,28 @@ export default function OnlineSetup({
   }
 
   if (room) {
+    const totalHumanSeats = waitingInfo ? waitingInfo.numPlayers - waitingInfo.aiPlayerIds.length : null;
+    const remaining = totalHumanSeats !== null ? totalHumanSeats - waitingInfo.joinedSeats.length : null;
+
     return (
       <MenuFrame>
         <p>Waiting for other players to join…</p>
         <div className="room-name-display">{room.roomName}</div>
         <p className="setup-hint">Share this room name with the other players.</p>
+        {joinMessages.length > 0 && (
+          <ul className="waiting-join-log">
+            {joinMessages.map((message, i) => (
+              <li key={i}>{message}</li>
+            ))}
+          </ul>
+        )}
+        {remaining !== null && (
+          <p className="setup-hint waiting-remaining">
+            {remaining > 0
+              ? `Still waiting for ${remaining} player${remaining === 1 ? "" : "s"}.`
+              : "Everyone's here — starting…"}
+          </p>
+        )}
         <button type="button" className="secondary-button" onClick={handleCancel}>
           Cancel
         </button>

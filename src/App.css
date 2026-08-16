@@ -194,6 +194,22 @@ button {
   text-align: center;
 }
 
+.waiting-join-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  color: var(--text);
+  font-size: clamp(13px, calc(11.333px + 0.37vw), 15px);
+}
+
+.waiting-remaining {
+  font-weight: 600;
+}
+
 .room-name-input {
   font: inherit;
   font-size: clamp(16px, calc(14.667px + 0.37vw), 18px);
