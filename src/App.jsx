@@ -280,6 +280,7 @@ export default function App() {
       return (
         <SetupScreen
           initialNames={savedPlayerNameInputs}
+          onBack={backToMenu}
           onStart={(numPlayers, aiIds, names, timerSeconds, rawNames) => {
             setAiPlayerIds(aiIds);
             setPlayerNames(names);

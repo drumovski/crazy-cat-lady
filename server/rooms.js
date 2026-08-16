@@ -90,6 +90,19 @@ function isRoomEmpty(room) {
 }
 
 function assignSeat(room, socketId, name) {
+  // Idempotency guard: if this exact socket already holds a seat in this
+  // room, hand back that same seat instead of searching for another one.
+  // Without this, a joinRoom emit queued twice on the same socket (e.g. a
+  // "Join Room" button double-clicked while waiting on a slow/cold-starting
+  // server — socket.io buffers emits made before the connection is up, so
+  // both fire back-to-back the moment it opens) would find two *different*
+  // free seats and seat the same player twice under the same name, silently
+  // eating a seat a real second player needed.
+  const existingSeat = room.socketToSeat.get(socketId);
+  if (existingSeat !== undefined) {
+    return { playerId: existingSeat };
+  }
+
   const freeSeat = room.humanSeats.find(seatId => !room.seatToSocket.has(seatId));
   if (freeSeat === undefined) {
     return { error: "Room is full" };

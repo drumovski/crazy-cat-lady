@@ -47,6 +47,13 @@ export default function OnlineSetup({
   const [joinRoomName, setJoinRoomName] = useState("");
   const [error, setError] = useState(null);
   const [room, setRoom] = useState(initialRoom); // { roomName, playerId } once created/joined
+  // Disables the Create/Join buttons for the duration of their own round
+  // trip — same fix as App.jsx's playAgainPending, for the same bug class: a
+  // slow/cold-starting server (e.g. Render's free tier waking up) left the
+  // button clickable for the whole wait, and a repeated click queued a
+  // second createRoom/joinRoom emit on the same socket that fired the moment
+  // the connection came up, seating the same player twice under one name.
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     if (!room) return undefined;
@@ -85,8 +92,11 @@ export default function OnlineSetup({
   }
 
   async function handleCreate() {
+    if (isPending) return;
     setError(null);
+    setIsPending(true);
     const result = await createRoom(numPlayers, numAiOpponents, playerName, roomNameInput, blockTimerSeconds);
+    setIsPending(false);
     if (result.error) {
       setError(result.error);
       return;
@@ -95,8 +105,11 @@ export default function OnlineSetup({
   }
 
   async function handleJoin() {
+    if (isPending) return;
     setError(null);
+    setIsPending(true);
     const result = await joinRoom(joinRoomName, playerName);
+    setIsPending(false);
     if (result.error) {
       setError(result.error);
       return;
@@ -195,8 +208,8 @@ export default function OnlineSetup({
           </select>
         </label>
         {error && <p className="setup-error">{error}</p>}
-        <button type="button" className="primary-button" disabled={!isRoomNameValid} onClick={handleCreate}>
-          Create Room
+        <button type="button" className="primary-button" disabled={!isRoomNameValid || isPending} onClick={handleCreate}>
+          {isPending ? "Creating…" : "Create Room"}
         </button>
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>
           Back
@@ -232,10 +245,10 @@ export default function OnlineSetup({
         <button
           type="button"
           className="primary-button"
-          disabled={joinRoomName.trim().length < ROOM_NAME_MIN_LENGTH}
+          disabled={joinRoomName.trim().length < ROOM_NAME_MIN_LENGTH || isPending}
           onClick={handleJoin}
         >
-          Join Room
+          {isPending ? "Joining…" : "Join Room"}
         </button>
         <button type="button" className="secondary-button" onClick={() => setMode("choose")}>
           Back

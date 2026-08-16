@@ -7,7 +7,7 @@ const BLOCK_TIMER_CHOICES = Array.from(
   (_, i) => BLOCK_TIMER_MIN + i
 );
 
-export default function SetupScreen({ onStart, initialNames = ["", "", "", "", ""] }) {
+export default function SetupScreen({ onStart, onBack, initialNames = ["", "", "", "", ""] }) {
   const [numPlayers, setNumPlayers] = useState(2);
   const [aiPlayerIds, setAiPlayerIds] = useState([]);
   const [playerNames, setPlayerNames] = useState(initialNames);
@@ -103,6 +103,11 @@ export default function SetupScreen({ onStart, initialNames = ["", "", "", "", "
       <button type="button" className="primary-button" onClick={handleStart}>
         Start Game
       </button>
+      {onBack && (
+        <button type="button" className="secondary-button" onClick={onBack}>
+          Back
+        </button>
+      )}
 
       <p className="setup-hint">
         Local hotseat: pass the device around, playing one card per turn — any AI players take their

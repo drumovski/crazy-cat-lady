@@ -145,3 +145,39 @@ function testLeaveRoomIsASafeNoOpForAnUnknownRoomOrSeat() {
 }
 
 testLeaveRoomIsASafeNoOpForAnUnknownRoomOrSeat();
+
+function testDoubleJoinFromTheSameSocketDoesNotStealASecondSeat() {
+  // Bug, fixed: a "Join Room" button double-clicked while waiting on a
+  // slow/cold-starting server queued two joinRoom emits on the same socket
+  // (socket.io buffers emits made before the connection is up), both firing
+  // back-to-back the moment it opened — assignSeat's free-seat search had no
+  // guard against the SAME socket claiming a second, different seat, so one
+  // real player ended up seated twice under one name in a 3+ player room,
+  // silently eating a seat another real player needed.
+  const roomName = "DoubleJoinTest1";
+  const created = createRoom({
+    numPlayers: 3,
+    numAiOpponents: 0,
+    socketId: "socketP",
+    name: "Priya",
+    roomName,
+    blockTimerSeconds: 10
+  });
+  console.log("Priya (creator) got seat 0:", created.playerId === 0);
+
+  // Same socketId joining again — simulates the queued double-emit.
+  const secondJoinSameSocket = joinRoom(roomName, "socketP", "Priya");
+  console.log(
+    "A second joinRoom from the SAME socket returns the SAME seat, not a new one:",
+    secondJoinSameSocket.playerId === 0
+  );
+
+  // A genuinely different player joining afterward still gets a real, free
+  // seat — the fix shouldn't make the room look more full than it is.
+  const realSecondPlayer = joinRoom(roomName, "socketQ", "Quinn");
+  console.log("A different socket still claims a real free seat:", realSecondPlayer.playerId === 1);
+}
+
+testDoubleJoinFromTheSameSocketDoesNotStealASecondSeat();
+
+testLeaveRoomIsASafeNoOpForAnUnknownRoomOrSeat();
