@@ -9,12 +9,16 @@ let socket = null;
 
 function getSocket() {
   if (!socket) {
-    // Allow the long-polling fallback (Socket.IO's default behavior) rather
-    // than forcing WebSocket-only — some hosting proxies (e.g. shared-hosting
-    // Node.js apps behind a reverse proxy) don't pass WebSocket upgrades
-    // through cleanly, and without polling as a fallback the connection
-    // would just fail outright instead of degrading gracefully.
-    socket = io(SERVER_URL, { transports: ["websocket", "polling"], autoConnect: true });
+    // Allow the long-polling fallback rather than forcing WebSocket-only —
+    // some hosting proxies don't pass WebSocket upgrades through cleanly.
+    // `tryAllTransports` is what actually makes the fallback happen: without
+    // it (the default is false), a failed first transport just retries that
+    // same transport forever and never moves on to "polling".
+    socket = io(SERVER_URL, {
+      transports: ["websocket", "polling"],
+      tryAllTransports: true,
+      autoConnect: true,
+    });
   }
   return socket;
 }
